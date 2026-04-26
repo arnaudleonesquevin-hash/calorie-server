@@ -20,11 +20,12 @@ app.post('/nutrition', async (req, res) => {
         max_tokens: 300,
         messages: [{
           role: 'user',
-          content: `Donne-moi les informations nutritionnelles pour: ${aliment}. Réponds UNIQUEMENT avec ce format JSON sans aucun autre texte: {"calories": 000, "proteines": 00, "glucides": 00, "lipides": 00}`
+          content: `Tu es une base de données nutritionnelle. Réponds UNIQUEMENT avec du JSON valide, rien d'autre, pas d'explication. Format exact: {"calories":200,"proteines":20,"glucides":0,"lipides":10} pour: ${aliment}`
         }]
       })
-    });const data = await response.json();
-    const texte = data.content[0].text;
+    });
+    const data = await response.json();
+    const texte = data.content[0].text.trim();
     const nutrition = JSON.parse(texte);
     res.json(nutrition);
   } catch (e) {
