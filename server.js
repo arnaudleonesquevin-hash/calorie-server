@@ -26,8 +26,7 @@ app.post('/nutrition', async (req, res) => {
     });
     const data = await response.json();
     const texte = data.content[0].text.trim();
-    const nutrition = JSON.parse(texte);
-    res.json(nutrition);
+    res.json({ raw: texte });
   } catch (e) {
     res.status(500).json({ error: String(e) });
   }
