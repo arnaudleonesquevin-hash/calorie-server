@@ -20,7 +20,7 @@ app.post('/nutrition', async (req, res) => {
         max_tokens: 500,
         messages: [{
           role: 'user',
-          content: 'Tu es une base de donnees nutritionnelle. Analyse ce repas et reponds UNIQUEMENT avec du JSON valide, sans backticks, sans explication. Si cest un seul aliment reponds: {"calories":200,"proteines":20,"glucides":0,"lipides":10}. Si cest plusieurs aliments reponds avec un tableau: [{"nom":"steak","calories":200,"proteines":20,"glucides":0,"lipides":10},{"nom":"frites","calories":300,"proteines":3,"glucides":40,"lipides":15}]. Repas a analyser: ' + aliment
+          content: 'Tu es une base de donnees nutritionnelle. Analyse ce repas et reponds UNIQUEMENT avec un tableau JSON valide, sans backticks, sans explication. Reponds toujours avec un tableau meme pour un seul aliment. Format: [{"nom":"steak 200g","calories":542,"proteines":52,"glucides":0,"lipides":34}]. Repas: ' + aliment
         }]
       })
     });
