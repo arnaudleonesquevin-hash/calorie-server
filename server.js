@@ -17,8 +17,11 @@ app.post('/nutrition', async (req, res) => {
       },
       body: JSON.stringify({
         model: 'claude-haiku-4-5-20251001',
-        max_tokens: 300,
-        messages: [{ role: 'user', content: `Donne les infos nutritionnelles pour: ${aliment}. Réponds UNIQUEMENT avec ce JSON, sans backticks, sans explication: {"calories":200,"proteines":20,"glucides":0,"lipides":10}` }]
+        max_tokens: 500,
+        messages: [{
+          role: 'user',
+          content: 'Tu es une base de donnees nutritionnelle. Analyse ce repas et reponds UNIQUEMENT avec du JSON valide, sans backticks, sans explication. Si cest un seul aliment reponds: {"calories":200,"proteines":20,"glucides":0,"lipides":10}. Si cest plusieurs aliments reponds avec un tableau: [{"nom":"steak","calories":200,"proteines":20,"glucides":0,"lipides":10},{"nom":"frites","calories":300,"proteines":3,"glucides":40,"lipides":15}]. Repas a analyser: ' + aliment
+        }]
       })
     });
     const data = await response.json();
@@ -31,5 +34,5 @@ app.post('/nutrition', async (req, res) => {
 });
 
 app.listen(process.env.PORT || 3000, '0.0.0.0', () => {
-  console.log('Serveur démarré sur le port 3000');
+  console.log('Serveur demarre sur le port 3000');
 });
