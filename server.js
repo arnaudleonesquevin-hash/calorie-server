@@ -18,14 +18,11 @@ app.post('/nutrition', async (req, res) => {
       body: JSON.stringify({
         model: 'claude-haiku-4-5-20251001',
         max_tokens: 300,
-        messages: [{
-          role: 'user',
-          content: `Tu es une base de données nutritionnelle. Réponds UNIQUEMENT avec du JSON valide, rien d'autre, pas d'explication. Format exact: {"calories":200,"proteines":20,"glucides":0,"lipides":10} pour: ${aliment}`
-        }]
+        messages: [{ role: 'user', content: `Donne les infos nutritionnelles pour: ${aliment}. Réponds UNIQUEMENT avec ce JSON, sans backticks, sans explication: {"calories":200,"proteines":20,"glucides":0,"lipides":10}` }]
       })
     });
     const data = await response.json();
-    const texte = data.content[0].text.trim();
+    const texte = data.content[0].text.trim().replace(/```json/g, '').replace(/```/g, '').trim();
     const nutrition = JSON.parse(texte);
     res.json(nutrition);
   } catch (e) {
