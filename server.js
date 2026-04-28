@@ -31,21 +31,6 @@ function getPoidsPiece(nom) {
   return 100;
 }
 
-function convertirNombres(texte) {
-  const nombres = {
-    'zero': '0', 'un': '1', 'une': '1', 'deux': '2', 'trois': '3',
-    'quatre': '4', 'cinq': '5', 'six': '6', 'sept': '7', 'huit': '8',
-    'neuf': '9', 'dix': '10', 'onze': '11', 'douze': '12',
-    'treize': '13', 'quatorze': '14', 'quinze': '15', 'vingt': '20',
-    'trente': '30', 'quarante': '40', 'cinquante': '50', 'cent': '100'
-  };
-  let result = texte.toLowerCase();
-  for (const [mot, chiffre] of Object.entries(nombres)) {
-    result = result.replace(new RegExp('\\b' + mot + '\\b', 'g'), chiffre);
-  }
-  return result;
-}
-
 function rechercherCiqual(nomFr) {
   const nom = nomFr.toLowerCase().trim();
   let meilleur = null;
@@ -71,8 +56,23 @@ function rechercherCiqual(nomFr) {
 app.post('/nutrition', async (req, res) => {
   const { aliment } = req.body;
   try {
-    const alimentConverti = convertirNombres(aliment);
-    const prompt = 'Tu es un expert en nutrition. Analyse ce repas et reponds UNIQUEMENT avec un tableau JSON valide sans backticks ni explication. REGLES IMPORTANTES: 1) Les oeufs se comptent en pieces (unite=piece). 2) Les fruits entiers se comptent en pieces. 3) Les viandes et feculents avec un poids explicite utilisent unite=gramme. 4) Une portion ou un plat sans poids utilise unite=gramme avec quantite=300. 5) Choisis le nom EXACT dans cette liste Ciqual officielle: \n' + listePourClaude + '\n\nSi laliment nest pas dans la liste, mets null pour nom_ciqual. Format JSON strict: [{"nom_ciqual":"oeuf, brouille, avec matiere grasse","nom_original":"oeufs brouilles","quantite":3,"unite":"piece"}]. Repas: ' + alimentConverti;
+    const prompt = `Tu es un expert en nutrition. Analyse ce repas et reponds UNIQUEMENT avec un tableau JSON valide sans backticks ni explication.
+
+REGLES TRES IMPORTANTES:
+1) Convertis les nombres en toutes lettres en chiffres: "trois" = 3, "deux" = 2, "un" = 1, "une" = 1, "quatre" = 4, "cinq" = 5.
+2) La quantite est toujours UN SEUL NOMBRE. Si le repas dit "trois oeufs", quantite=3 et nom_original="oeufs brouilles" (sans le nombre dans le nom).
+3) Les oeufs, fruits entiers se comptent en pieces (unite="piece").
+4) Les viandes et feculents avec un poids explicite utilisent unite="gramme".
+5) Une portion sans poids = quantite=300, unite="gramme".
+6) Choisis le nom EXACT dans cette liste Ciqual officielle:
+${listePourClaude}
+
+Si l aliment n est pas dans la liste, mets null pour nom_ciqual.
+
+Format JSON strict (le nom_original ne doit JAMAIS contenir de nombre):
+[{"nom_ciqual":"oeuf, brouille, avec matiere grasse","nom_original":"oeufs brouilles","quantite":3,"unite":"piece"},{"nom_ciqual":"boeuf, steak ou bifteck, grille","nom_original":"steak grille","quantite":150,"unite":"gramme"}]
+
+Repas a analyser: ${aliment}`;
 
     const claudeResponse = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
@@ -129,5 +129,5 @@ app.post('/nutrition', async (req, res) => {
 });
 
 app.listen(process.env.PORT || 3000, '0.0.0.0', () => {
-  console.log('Serveur Ciqual v5 demarre!');
+  console.log('Serveur Ciqual v6 demarre!');
 });
