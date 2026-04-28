@@ -7,6 +7,29 @@ app.use(cors());
 app.use(express.json());
 
 const ciqual = JSON.parse(fs.readFileSync('./ciqual.json', 'utf8'));
+const courants = JSON.parse(fs.readFileSync('./ciqual_courants.json', 'utf8'));
+const indexCiqual = {};
+for (const a of ciqual) indexCiqual[a.nom] = a;
+const indexCourants = {};
+for (const a of courants) indexCourants[a.nom] = a;
+
+const listePourClaude = courants.map(a => a.nom).join('\n');
+
+const poidsPiece = {
+  'oeuf': 50, 'orange': 150, 'pomme': 150, 'banane': 120,
+  'kiwi': 80, 'poire': 150, 'peche': 150, 'hamburger': 180,
+  'biscuit': 15, 'tranche': 30, 'yaourt': 125, 'verre': 200,
+  'tasse': 250, 'cuillere': 15, 'steak': 150, 'filet': 150,
+  'cuisse': 200, 'escalope': 150, 'cote': 180, 'portion': 250
+};
+
+function getPoidsPiece(nom) {
+  const n = nom.toLowerCase();
+  for (const [k, v] of Object.entries(poidsPiece)) {
+    if (n.includes(k)) return v;
+  }
+  return 100;
+}
 
 function rechercherCiqual(nomFr) {
   const nom = nomFr.toLowerCase().trim();
@@ -20,35 +43,21 @@ function rechercherCiqual(nomFr) {
     if (n.includes(nom)) score = nom.length / n.length * 100;
     else if (nom.includes(n)) score = n.length / nom.length * 80;
     else {
-      const mots = nom.split(' ');
+      const mots = nom.split(' ').filter(m => m.length > 2);
       const motsN = n.split(' ');
-      const communs = mots.filter(m => m.length > 2 && motsN.some(mn => mn.includes(m) || m.includes(mn)));
-      score = communs.length / Math.max(mots.length, motsN.length) * 60;
+      const communs = mots.filter(m => motsN.some(mn => mn.includes(m) || m.includes(mn)));
+      score = communs.length / Math.max(mots.length, 1) * 60;
     }
     if (score > meilleurScore) { meilleurScore = score; meilleur = a; }
   }
   return meilleurScore > 20 ? meilleur : null;
 }
 
-const poidsPiece = {
-  'oeuf': 50, 'orange': 150, 'pomme': 150, 'banane': 120,
-  'kiwi': 80, 'poire': 150, 'peche': 150, 'hamburger': 180,
-  'biscuit': 15, 'tranche': 30, 'yaourt': 125, 'verre': 200,
-  'tasse': 250, 'cuillere': 15
-};
-
-function getPoidsPiece(nom) {
-  const n = nom.toLowerCase();
-  for (const [k, v] of Object.entries(poidsPiece)) {
-    if (n.includes(k)) return v;
-  }
-  return 100;
-}
-
 app.post('/nutrition', async (req, res) => {
   const { aliment } = req.body;
   try {
-    const prompt = 'Analyse ce repas. Reponds UNIQUEMENT avec un tableau JSON valide sans backticks. Extrais chaque aliment avec son nom en francais et sa quantite. Format: [{"nom":"oeuf","quantite":2,"unite":"piece"},{"nom":"steak","quantite":200,"unite":"gramme"},{"nom":"lait","quantite":250,"unite":"ml"}]. Repas: ' + aliment;
+    const prompt = 'Tu es un expert en nutrition. Analyse ce repas et reponds UNIQUEMENT avec un tableau JSON valide sans backticks ni explication. Pour chaque aliment, choisis le nom EXACT dans cette liste officielle Ciqual (copie le nom exactement tel quel): \n' + listePourClaude + '\n\nSi laliment nest pas dans la liste, mets null pour nom_ciqual et mets le nom en francais dans nom_original. Format JSON: [{"nom_ciqual":"boeuf, steak ou bifteck, grille","nom_original":"steak grille","quantite":150,"unite":"gramme"}]. Repas a analyser: ' + aliment;
+
     const claudeResponse = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
       headers: {
@@ -58,7 +67,7 @@ app.post('/nutrition', async (req, res) => {
       },
       body: JSON.stringify({
         model: 'claude-haiku-4-5-20251001',
-        max_tokens: 500,
+        max_tokens: 800,
         messages: [{ role: 'user', content: prompt }]
       })
     });
@@ -67,15 +76,23 @@ app.post('/nutrition', async (req, res) => {
     const alimentsExtraits = JSON.parse(texte);
 
     const resultats = alimentsExtraits.map((a) => {
-      const found = rechercherCiqual(a.nom);
+      let found = null;
+      if (a.nom_ciqual && a.nom_ciqual !== 'null') {
+        found = indexCourants[a.nom_ciqual] || indexCiqual[a.nom_ciqual];
+      }
+      if (!found && a.nom_original) {
+        found = rechercherCiqual(a.nom_original);
+      }
+
       let quantiteG;
-      if (a.unite === 'piece') quantiteG = a.quantite * getPoidsPiece(a.nom);
+      if (a.unite === 'piece') quantiteG = a.quantite * getPoidsPiece(a.nom_original || '');
       else if (a.unite === 'ml') quantiteG = a.quantite;
       else quantiteG = a.quantite;
       const facteur = quantiteG / 100;
+
       if (found) {
         return {
-          nom: a.quantite + ' ' + (a.unite === 'piece' ? 'x ' : (a.unite === 'ml' ? 'ml ' : 'g ')) + found.nom,
+          nom: a.quantite + ' ' + (a.unite === 'piece' ? 'x ' : (a.unite === 'ml' ? 'ml ' : 'g ')) + (a.nom_original || found.nom),
           calories: Math.round(found.calories * facteur),
           proteines: Math.round(found.proteines * facteur * 10) / 10,
           glucides: Math.round(found.glucides * facteur * 10) / 10,
@@ -85,7 +102,7 @@ app.post('/nutrition', async (req, res) => {
         };
       }
       return {
-        nom: a.quantite + ' ' + a.nom,
+        nom: a.quantite + ' ' + (a.nom_original || a.nom_ciqual || ''),
         calories: 0, proteines: 0, glucides: 0, lipides: 0, sucres: 0, fibres: 0,
       };
     });
@@ -96,5 +113,5 @@ app.post('/nutrition', async (req, res) => {
 });
 
 app.listen(process.env.PORT || 3000, '0.0.0.0', () => {
-  console.log('Serveur Ciqual demarre!');
+  console.log('Serveur Ciqual v3 demarre!');
 });
