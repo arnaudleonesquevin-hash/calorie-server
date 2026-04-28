@@ -20,7 +20,7 @@ app.post('/nutrition', async (req, res) => {
         max_tokens: 500,
         messages: [{
           role: 'user',
-          content: 'Tu es une base de donnees nutritionnelle. Analyse ce repas et reponds UNIQUEMENT avec un tableau JSON valide, sans backticks, sans explication. Reponds toujours avec un tableau meme pour un seul aliment. Format: [{"nom":"steak 200g","calories":542,"proteines":52,"glucides":0,"lipides":34}]. Repas: ' + aliment
+          content: 'Tu es une base de donnees nutritionnelle. Analyse ce repas et reponds UNIQUEMENT avec un tableau JSON valide, sans backticks, sans explication. IMPORTANT: regroupe les aliments identiques en une seule entree avec la quantite totale. Ne cree jamais plusieurs lignes pour le meme aliment. Format: [{"nom":"3 hamburgers","calories":1620,"proteines":90,"glucides":120,"lipides":60}]. Repas: ' + aliment
         }]
       })
     });
