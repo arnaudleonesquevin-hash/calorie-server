@@ -56,23 +56,7 @@ function rechercherCiqual(nomFr) {
 app.post('/nutrition', async (req, res) => {
   const { aliment } = req.body;
   try {
-    const prompt = `Tu es un expert en nutrition. Analyse ce repas et reponds UNIQUEMENT avec un tableau JSON valide sans backticks ni explication.
-
-REGLES TRES IMPORTANTES:
-1) Convertis les nombres en toutes lettres en chiffres: "trois" = 3, "deux" = 2, "un" = 1, "une" = 1, "quatre" = 4, "cinq" = 5.
-2) La quantite est toujours UN SEUL NOMBRE. Si le repas dit "trois oeufs", quantite=3 et nom_original="oeufs brouilles" (sans le nombre dans le nom).
-3) Les oeufs, fruits entiers se comptent en pieces (unite="piece").
-4) Les viandes et feculents avec un poids explicite utilisent unite="gramme".
-5) Une portion sans poids = quantite=300, unite="gramme".
-6) Choisis le nom EXACT dans cette liste Ciqual officielle:
-${listePourClaude}
-
-Si l aliment n est pas dans la liste, mets null pour nom_ciqual.
-
-Format JSON strict (le nom_original ne doit JAMAIS contenir de nombre):
-[{"nom_ciqual":"oeuf, brouille, avec matiere grasse","nom_original":"oeufs brouilles","quantite":3,"unite":"piece"},{"nom_ciqual":"boeuf, steak ou bifteck, grille","nom_original":"steak grille","quantite":150,"unite":"gramme"}]
-
-Repas a analyser: ${aliment}`;
+    const prompt = "Tu es un expert en nutrition. Analyse ce repas et reponds UNIQUEMENT avec un tableau JSON valide sans backticks ni explication.\n\nREGLES TRES IMPORTANTES:\n1) Convertis les nombres en toutes lettres en chiffres: trois=3, deux=2, un=1, une=1, quatre=4, cinq=5.\n2) La quantite est toujours UN SEUL NOMBRE. Si le repas dit trois oeufs, quantite=3 et nom_original=oeufs brouilles (sans le nombre dans le nom).\n3) Les oeufs et fruits entiers se comptent TOUJOURS en pieces (unite=piece), JAMAIS en grammes. Exemple : '2 oeufs' = quantite=2, unite=piece.\n4) Les viandes et feculents avec un poids explicite utilisent unite=gramme.\n5) Une portion sans poids = quantite=300, unite=gramme.\n6) Choisis le nom EXACT dans cette liste Ciqual officielle:\n" + listePourClaude + "\n\nSi l aliment n est pas dans la liste, mets null pour nom_ciqual.\n\nFormat JSON strict (le nom_original ne doit JAMAIS contenir de nombre):\n[{\"nom_ciqual\":\"oeuf, brouille, avec matiere grasse\",\"nom_original\":\"oeufs brouilles\",\"quantite\":3,\"unite\":\"piece\"}]\n\nRepas a analyser: " + aliment;
 
     const claudeResponse = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
