@@ -1,6 +1,9 @@
 import { View, Text, StyleSheet, TouchableOpacity, TextInput, Alert, ScrollView } from 'react-native';
-import { useState, useRef } from 'react';
+import { useState } from 'react';
 import { useSpeechRecognitionEvent, ExpoSpeechRecognitionModule } from 'expo-speech-recognition';
+
+let _texteAccumule = '';
+let _ecouteActif = false;
 
 export default function HomeScreen() {
   const [texte, setTexte] = useState('');
@@ -12,23 +15,18 @@ export default function HomeScreen() {
   const [nouvelAliment, setNouvelAliment] = useState('');
   const [ajoutEnCours, setAjoutEnCours] = useState(false);
   const [recalcEnCours, setRecalcEnCours] = useState(-1);
-  const texteAccumule = useRef('');
-  const texteRef = useRef('');
-  const ecouteRef = useRef(false);
 
   useSpeechRecognitionEvent('result', (event) => {
     if (event.results[0]) {
-      const base = texteAccumule.current;
       const segment = event.results[0].transcript;
-      const complet = base ? base + ' ' + segment : segment;
+      const complet = _texteAccumule ? _texteAccumule + ' ' + segment : segment;
       setTexte(complet);
-      texteRef.current = complet;
     }
   });
 
   useSpeechRecognitionEvent('end', () => {
-    if (ecouteRef.current) {
-      texteAccumule.current = texteRef.current;
+    if (_ecouteActif) {
+      _texteAccumule = texte;
       ExpoSpeechRecognitionModule.start({ lang: 'fr-FR', interimResults: true, continuous: true });
     }
   });
@@ -37,17 +35,17 @@ export default function HomeScreen() {
     if (ecoute) {
       ExpoSpeechRecognitionModule.stop();
       setEcoute(false);
-      ecouteRef.current = false;
-      texteAccumule.current = '';
-      texteRef.current = '';
+      _ecouteActif = false;
+      _texteAccumule = '';
     } else {
       const { granted } = await ExpoSpeechRecognitionModule.requestPermissionsAsync();
       if (!granted) {
         Alert.alert('Permission refusee', 'Autorise le micro dans les parametres');
         return;
       }
+      _texteAccumule = '';
+      _ecouteActif = true;
       setEcoute(true);
-      ecouteRef.current = true;
       ExpoSpeechRecognitionModule.start({ lang: 'fr-FR', interimResults: true, continuous: true });
     }
   };
@@ -126,8 +124,7 @@ export default function HomeScreen() {
     setEtape('saisie');
     setTexte('');
     setAliments([]);
-    texteAccumule.current = '';
-    texteRef.current = '';
+    _texteAccumule = '';
     Alert.alert('Ajoute !', 'Total repas: ' + total + ' kcal');
   };
 
@@ -169,7 +166,7 @@ export default function HomeScreen() {
         <TouchableOpacity style={styles.button} onPress={confirmer}>
           <Text style={styles.buttonText}>Confirmer</Text>
         </TouchableOpacity>
-        <TouchableOpacity style={styles.buttonMicro} onPress={() => { setEtape('saisie'); texteAccumule.current = ''; texteRef.current = ''; }}>
+        <TouchableOpacity style={styles.buttonMicro} onPress={() => { setEtape('saisie'); _texteAccumule = ''; }}>
           <Text style={styles.buttonText}>Recommencer</Text>
         </TouchableOpacity>
       </ScrollView>
