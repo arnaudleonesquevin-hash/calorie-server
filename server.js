@@ -28,7 +28,9 @@ const FECULENTS = ['pate', 'p\u00e2te', 'riz', 'couscous', 'quinoa', 'boulgour',
 const BOISSONS = ['jus', 'vin', 'rhum', 'vodka', 'whisky', 'panache', 'panach\u00e9', 'boisson', 'eau de vie', 'cognac', 'armagnac'];
 
 function estOeuf(nom) {
-  return /\boeuf\b|\boeufs\b|\b\u0153uf\b|\b\u0153ufs\b/.test(nom);
+  // boeuf/bœuf ne doit pas matcher
+  if (nom.includes('boeuf') || nom.includes('b\u0153uf')) return false;
+  return nom.includes('oeuf') || nom.includes('oeufs') || nom.includes('\u0153uf') || nom.includes('\u0153ufs');
 }
 
 function estViande(nom) {
@@ -80,7 +82,7 @@ function rechercherCiqual(nomFr) {
 function appliquerDefauts(a) {
   const nom = (a.nom_original || '').toLowerCase();
 
-  // Oeufs sans precision -> brouilles (boeuf ne doit pas matcher)
+  // Oeufs sans precision -> brouilles
   if (estOeuf(nom) && !nom.includes('plat') && !nom.includes('dur') && !nom.includes('coque') && !nom.includes('poche')) {
     a.nom_ciqual = 'oeuf, brouill\u00e9, avec mati\u00e8re grasse';
     a.unite = 'piece';
@@ -94,7 +96,7 @@ function appliquerDefauts(a) {
     }
   }
 
-  // Viandes : 180g par defaut sauf si poids explicite fourni par utilisateur
+  // Viandes : 180g par defaut sauf si poids explicite > 30g
   if (estViande(nom) && !estOeuf(nom)) {
     if (!(a.unite === 'gramme' && a.quantite > 30)) {
       a.unite = 'gramme';
@@ -197,5 +199,5 @@ app.post('/nutrition', async (req, res) => {
 });
 
 app.listen(process.env.PORT || 3000, '0.0.0.0', () => {
-  console.log('Serveur Ciqual v10 demarre!');
+  console.log('Serveur Ciqual v11 demarre!');
 });
