@@ -1,5 +1,5 @@
 import { View, Text, StyleSheet, TouchableOpacity, TextInput, Alert, ScrollView } from 'react-native';
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { useSpeechRecognitionEvent, ExpoSpeechRecognitionModule } from 'expo-speech-recognition';
 
 export default function HomeScreen() {
@@ -12,15 +12,22 @@ export default function HomeScreen() {
   const [nouvelAliment, setNouvelAliment] = useState('');
   const [ajoutEnCours, setAjoutEnCours] = useState(false);
   const [recalcEnCours, setRecalcEnCours] = useState(-1);
+  const texteAccumule = useRef('');
+  const texteRef = useRef('');
 
   useSpeechRecognitionEvent('result', (event) => {
     if (event.results[0]) {
-      setTexte(event.results[0].transcript);
+      const base = texteAccumule.current;
+      const segment = event.results[0].transcript;
+      const complet = base ? base + ' ' + segment : segment;
+      setTexte(complet);
+      texteRef.current = complet;
     }
   });
 
   useSpeechRecognitionEvent('end', () => {
     if (ecoute) {
+      texteAccumule.current = texteRef.current;
       ExpoSpeechRecognitionModule.start({ lang: 'fr-FR', interimResults: true, continuous: true });
     }
   });
@@ -29,6 +36,8 @@ export default function HomeScreen() {
     if (ecoute) {
       ExpoSpeechRecognitionModule.stop();
       setEcoute(false);
+      texteAccumule.current = '';
+      texteRef.current = '';
     } else {
       const { granted } = await ExpoSpeechRecognitionModule.requestPermissionsAsync();
       if (!granted) {
@@ -76,7 +85,8 @@ export default function HomeScreen() {
   };
 
   const recalculerAliment = async (index) => {
-    const nom = aliments[index].nom;
+    const nomBrut = aliments[index].nom;
+    const nom = nomBrut.replace(/^\d+\s*(x|g|ml)\s*/i, '').trim();
     if (!nom) return;
     setRecalcEnCours(index);
     try {
@@ -113,6 +123,8 @@ export default function HomeScreen() {
     setEtape('saisie');
     setTexte('');
     setAliments([]);
+    texteAccumule.current = '';
+    texteRef.current = '';
     Alert.alert('Ajoute !', 'Total repas: ' + total + ' kcal');
   };
 
@@ -154,7 +166,7 @@ export default function HomeScreen() {
         <TouchableOpacity style={styles.button} onPress={confirmer}>
           <Text style={styles.buttonText}>Confirmer</Text>
         </TouchableOpacity>
-        <TouchableOpacity style={styles.buttonMicro} onPress={() => setEtape('saisie')}>
+        <TouchableOpacity style={styles.buttonMicro} onPress={() => { setEtape('saisie'); texteAccumule.current = ''; texteRef.current = ''; }}>
           <Text style={styles.buttonText}>Recommencer</Text>
         </TouchableOpacity>
       </ScrollView>
@@ -185,7 +197,7 @@ const styles = StyleSheet.create({
   input: { width: '100%', borderWidth: 1, borderColor: '#ddd', borderRadius: 10, padding: 15, fontSize: 16, marginBottom: 15 },
   button: { backgroundColor: '#FF6B6B', paddingHorizontal: 30, paddingVertical: 15, borderRadius: 30, marginBottom: 15, width: '100%', alignItems: 'center' },
   buttonMicro: { backgroundColor: '#4ECDC4', paddingHorizontal: 30, paddingVertical: 15, borderRadius: 30, width: '100%', alignItems: 'center' },
-  buttonMicroActif: { backgroundColor: '#FF0000', paddingHorizontal: 30, paddingVertical: 15, borderRadius: 30, width: '100%', alignItems: 'center' },
+  buttonMicroActif: { backgroundColor: '#FF0000', paddingHorizontal: 30, paddingVertify: 15, borderRadius: 30, width: '100%', alignItems: 'center' },
   buttonText: { color: '#fff', fontSize: 18, fontWeight: 'bold' },
   alimentRow: { flexDirection: 'row', alignItems: 'center', width: '100%', marginBottom: 10, backgroundColor: '#f9f9f9', borderRadius: 10, padding: 10 },
   alimentInfo: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
