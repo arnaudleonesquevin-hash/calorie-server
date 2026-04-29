@@ -61,11 +61,13 @@ function appliquerDefauts(a) {
     a.nom_ciqual = 'oeuf, brouille, avec matiere grasse';
     a.unite = 'piece';
   }
-  // Steak sans precision -> steak hache
-  if ((nom.includes('steak') || nom.includes('bifteck')) &&
-      !nom.includes('hache') && !nom.includes('faux') && !nom.includes('rumsteck')) {
-    a.nom_ciqual = 'boeuf, steak hache, cuit (aliment moyen)';
+  // Steak -> steak hache, toujours en piece de 150g
+  if (nom.includes('steak') || nom.includes('bifteck')) {
+    if (!nom.includes('faux') && !nom.includes('rumsteck')) {
+      a.nom_ciqual = 'boeuf, steak hache, cuit (aliment moyen)';
+    }
     a.unite = 'piece';
+    if (a.quantite > 10) a.quantite = 1;
   }
   return a;
 }
@@ -93,7 +95,6 @@ app.post('/nutrition', async (req, res) => {
     const alimentsExtraits = JSON.parse(texte);
 
     const resultats = alimentsExtraits.map((a) => {
-      // Appliquer les defauts avant recherche
       a = appliquerDefauts(a);
 
       let found = null;
@@ -104,7 +105,6 @@ app.post('/nutrition', async (req, res) => {
         found = rechercherCiqual(a.nom_original);
       }
 
-      // Forcer piece pour oeufs et fruits meme si Haiku a mis gramme
       const nomLower = (a.nom_original || '').toLowerCase();
       const forcePiece = nomLower.includes('oeuf') || nomLower.includes('steak') ||
         nomLower.includes('orange') || nomLower.includes('pomme') ||
