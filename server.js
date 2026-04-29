@@ -22,9 +22,10 @@ const poidsPiece = {
   'tasse': 250, 'cuillere': 15, 'portion': 300
 };
 
-const VIANDES = ['boeuf', 'steak', 'bifteck', 'poulet', 'porc', 'agneau', 'dinde', 'veau', 'canard', 'lapin', 'merguez', 'chipolata', 'saucisse', 'toulouse', 'escalope', 'cuisse', 'filet', 'rosbif', 'rumsteck', 'entrecote', 'entrecôte', 'gigot', 'cote', 'côte'];
-const POISSONS = ['saumon', 'cabillaud', 'thon', 'maquereau', 'truite', 'lieu', 'dorade', 'sardine', 'crevette', 'poisson', 'pave', 'pavé'];
-const BOISSONS = ['jus', 'vin', 'rhum', 'vodka', 'whisky', 'panache', 'panaché', 'boisson', 'eau de vie', 'cognac', 'armagnac'];
+const VIANDES = ['boeuf', 'b\u0153uf', 'steak', 'bifteck', 'poulet', 'porc', 'agneau', 'dinde', 'veau', 'canard', 'lapin', 'merguez', 'chipolata', 'saucisse', 'toulouse', 'escalope', 'cuisse', 'filet', 'rosbif', 'rumsteck', 'entrecote', 'entrecôte', 'gigot', 'cote', 'côte'];
+const POISSONS = ['saumon', 'cabillaud', 'thon', 'maquereau', 'truite', 'lieu', 'dorade', 'sardine', 'crevette', 'poisson', 'pave', 'pav\u00e9'];
+const FECULENTS = ['pate', 'p\u00e2te', 'riz', 'couscous', 'quinoa', 'boulgour', 'lentille', 'pois chiche', 'polenta', 'semoule'];
+const BOISSONS = ['jus', 'vin', 'rhum', 'vodka', 'whisky', 'panache', 'panach\u00e9', 'boisson', 'eau de vie', 'cognac', 'armagnac'];
 
 function estOeuf(nom) {
   return nom.includes('oeuf') || nom.includes('oeufs') || nom.includes('\u0153uf') || nom.includes('\u0153ufs');
@@ -36,6 +37,10 @@ function estViande(nom) {
 
 function estPoisson(nom) {
   return POISSONS.some(v => nom.includes(v));
+}
+
+function estFeculent(nom) {
+  return FECULENTS.some(v => nom.includes(v));
 }
 
 function estBoisson(nom) {
@@ -79,6 +84,7 @@ function appliquerDefauts(a) {
   if (estOeuf(nom) && !nom.includes('plat') && !nom.includes('dur') && !nom.includes('coque') && !nom.includes('poche')) {
     a.nom_ciqual = 'oeuf, brouill\u00e9, avec mati\u00e8re grasse';
     a.unite = 'piece';
+    return a;
   }
 
   // Steak -> steak hache par defaut
@@ -88,15 +94,31 @@ function appliquerDefauts(a) {
     }
   }
 
-  // Viandes et poissons : forcer 180g si pas de grammes explicites (quantite > 10)
-  if ((estViande(nom) || estPoisson(nom)) && !estOeuf(nom)) {
+  // Viandes : 180g par defaut si pas de grammes explicites > 10
+  if (estViande(nom) && !estOeuf(nom)) {
     if (a.unite !== 'gramme' || a.quantite <= 10) {
       a.unite = 'gramme';
       a.quantite = 180;
     }
   }
 
-  // Boissons : forcer 150ml si pas de ml explicites (quantite > 10)
+  // Poissons : 180g par defaut
+  if (estPoisson(nom)) {
+    if (a.unite !== 'gramme' || a.quantite <= 10) {
+      a.unite = 'gramme';
+      a.quantite = 180;
+    }
+  }
+
+  // Feculents : 180g par defaut
+  if (estFeculent(nom) && !estViande(nom)) {
+    if (a.unite !== 'gramme' || a.quantite <= 10) {
+      a.unite = 'gramme';
+      a.quantite = 180;
+    }
+  }
+
+  // Boissons : 150ml par defaut
   if (estBoisson(nom)) {
     if (a.unite !== 'ml' || a.quantite <= 10) {
       a.unite = 'ml';
@@ -175,5 +197,5 @@ app.post('/nutrition', async (req, res) => {
 });
 
 app.listen(process.env.PORT || 3000, '0.0.0.0', () => {
-  console.log('Serveur Ciqual v8 demarre!');
+  console.log('Serveur Ciqual v9 demarre!');
 });
