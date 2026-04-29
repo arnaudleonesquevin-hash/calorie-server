@@ -28,7 +28,6 @@ const FECULENTS = ['pate', 'p\u00e2te', 'riz', 'couscous', 'quinoa', 'boulgour',
 const BOISSONS = ['jus', 'vin', 'rhum', 'vodka', 'whisky', 'panache', 'panach\u00e9', 'boisson', 'eau de vie', 'cognac', 'armagnac'];
 
 function estOeuf(nom) {
-  // boeuf/bœuf ne doit pas matcher
   if (nom.includes('boeuf') || nom.includes('b\u0153uf')) return false;
   return nom.includes('oeuf') || nom.includes('oeufs') || nom.includes('\u0153uf') || nom.includes('\u0153ufs');
 }
@@ -96,36 +95,28 @@ function appliquerDefauts(a) {
     }
   }
 
-  // Viandes : 180g par defaut sauf si poids explicite > 30g
+  // Viandes : 180g si pas de poids precise (quantite=0)
   if (estViande(nom) && !estOeuf(nom)) {
-    if (!(a.unite === 'gramme' && a.quantite > 30)) {
-      a.unite = 'gramme';
-      a.quantite = 180;
-    }
+    a.unite = 'gramme';
+    if (a.quantite === 0 || a.quantite === null) a.quantite = 180;
   }
 
-  // Poissons : 180g par defaut
+  // Poissons : 180g si pas de poids precise
   if (estPoisson(nom)) {
-    if (!(a.unite === 'gramme' && a.quantite > 30)) {
-      a.unite = 'gramme';
-      a.quantite = 180;
-    }
+    a.unite = 'gramme';
+    if (a.quantite === 0 || a.quantite === null) a.quantite = 180;
   }
 
-  // Feculents : 180g par defaut
+  // Feculents : 180g si pas de poids precise
   if (estFeculent(nom) && !estViande(nom)) {
-    if (!(a.unite === 'gramme' && a.quantite > 30)) {
-      a.unite = 'gramme';
-      a.quantite = 180;
-    }
+    a.unite = 'gramme';
+    if (a.quantite === 0 || a.quantite === null) a.quantite = 180;
   }
 
-  // Boissons : 150ml par defaut
+  // Boissons : 150ml si pas de quantite precise
   if (estBoisson(nom)) {
-    if (!(a.unite === 'ml' && a.quantite > 30)) {
-      a.unite = 'ml';
-      a.quantite = 150;
-    }
+    a.unite = 'ml';
+    if (a.quantite === 0 || a.quantite === null) a.quantite = 150;
   }
 
   return a;
@@ -134,7 +125,7 @@ function appliquerDefauts(a) {
 app.post('/nutrition', async (req, res) => {
   const { aliment } = req.body;
   try {
-    const prompt = "Tu es un expert en nutrition. Analyse ce repas et reponds UNIQUEMENT avec un tableau JSON valide sans backticks ni explication.\n\nREGLES TRES IMPORTANTES:\n1) Convertis les nombres en toutes lettres en chiffres: trois=3, deux=2, un=1, une=1, quatre=4, cinq=5.\n2) La quantite est toujours UN SEUL NOMBRE. Si le repas dit trois oeufs, quantite=3 et nom_original=oeufs (sans le nombre dans le nom).\n3) Les oeufs et fruits entiers se comptent TOUJOURS en pieces (unite=piece), JAMAIS en grammes. Exemple : '2 oeufs' = quantite=2, unite=piece.\n4) Les viandes et feculents avec un poids explicite utilisent unite=gramme avec la quantite exacte mentionnee.\n5) Sans poids explicite, utilise unite=gramme et quantite=300. ATTENTION : cette regle ne s applique JAMAIS aux oeufs.\n6) Choisis le nom EXACT dans cette liste Ciqual officielle:\n" + listePourClaude + "\n\nSi l aliment n est pas dans la liste, mets null pour nom_ciqual.\n\nFormat JSON strict (le nom_original ne doit JAMAIS contenir de nombre):\n[{\"nom_ciqual\":\"oeuf, brouille, avec matiere grasse\",\"nom_original\":\"oeufs\",\"quantite\":3,\"unite\":\"piece\"}]\n\nRepas a analyser: " + aliment;
+    const prompt = "Tu es un expert en nutrition. Analyse ce repas et reponds UNIQUEMENT avec un tableau JSON valide sans backticks ni explication.\n\nREGLES TRES IMPORTANTES:\n1) Convertis les nombres en toutes lettres en chiffres: trois=3, deux=2, un=1, une=1, quatre=4, cinq=5.\n2) La quantite est toujours UN SEUL NOMBRE. Le nom_original ne doit JAMAIS contenir de nombre.\n3) Les oeufs et fruits entiers se comptent TOUJOURS en pieces (unite=piece). Exemple : '2 oeufs' = quantite=2, unite=piece.\n4) Si l utilisateur precise un poids en grammes (ex: 200g, 300g), mets unite=gramme et quantite=ce poids exact.\n5) Si l utilisateur ne precise PAS de poids, mets unite=gramme et quantite=0.\n6) Si l utilisateur precise un volume en ml (ex: 250ml), mets unite=ml et quantite=ce volume exact.\n7) Si l utilisateur ne precise PAS de volume pour une boisson, mets unite=ml et quantite=0.\n8) Choisis le nom EXACT dans cette liste Ciqual officielle:\n" + listePourClaude + "\n\nSi l aliment n est pas dans la liste, mets null pour nom_ciqual.\n\nFormat JSON strict:\n[{\"nom_ciqual\":\"boeuf, steak hache, cuit (aliment moyen)\",\"nom_original\":\"steak\",\"quantite\":0,\"unite\":\"gramme\"}]\n\nRepas a analyser: " + aliment;
 
     const claudeResponse = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
@@ -199,5 +190,5 @@ app.post('/nutrition', async (req, res) => {
 });
 
 app.listen(process.env.PORT || 3000, '0.0.0.0', () => {
-  console.log('Serveur Ciqual v11 demarre!');
+  console.log('Serveur Ciqual v12 demarre!');
 });
