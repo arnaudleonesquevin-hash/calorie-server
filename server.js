@@ -58,16 +58,18 @@ function appliquerDefauts(a) {
   // Oeufs sans precision -> brouilles
   if ((nom.includes('oeuf') || nom.includes('oeufs')) &&
       !nom.includes('plat') && !nom.includes('dur') && !nom.includes('coque') && !nom.includes('poche')) {
-    a.nom_ciqual = 'oeuf, brouille, avec matiere grasse';
+    a.nom_ciqual = 'oeuf, brouill\u00e9, avec mati\u00e8re grasse';
     a.unite = 'piece';
   }
-  // Steak -> steak hache, toujours en piece de 150g
+  // Steak -> steak hache, toujours en piece de 150g sauf si grammes explicites
   if (nom.includes('steak') || nom.includes('bifteck')) {
     if (!nom.includes('faux') && !nom.includes('rumsteck')) {
-      a.nom_ciqual = 'boeuf, steak hache, cuit (aliment moyen)';
+      a.nom_ciqual = 'boeuf, steak hach\u00e9, cuit (aliment moyen)';
     }
-    a.unite = 'piece';
-    if (a.quantite > 10) a.quantite = 1;
+    if (a.unite !== 'gramme') {
+      a.unite = 'piece';
+      if (a.quantite > 10) a.quantite = 1;
+    }
   }
   return a;
 }
@@ -109,7 +111,7 @@ app.post('/nutrition', async (req, res) => {
       const forcePiece = nomLower.includes('oeuf') || nomLower.includes('steak') ||
         nomLower.includes('orange') || nomLower.includes('pomme') ||
         nomLower.includes('banane') || nomLower.includes('kiwi');
-      if (forcePiece) a.unite = 'piece';
+      if (forcePiece && a.unite !== 'gramme') a.unite = 'piece';
 
       let quantiteG;
       if (a.unite === 'piece') quantiteG = a.quantite * getPoidsPiece(a.nom_original || '');
