@@ -19,12 +19,11 @@ const poidsPiece = {
   'oeuf': 55, 'orange': 150, 'pomme': 150, 'banane': 120,
   'kiwi': 80, 'poire': 150, 'peche': 150, 'hamburger': 180,
   'biscuit': 15, 'tranche': 30, 'yaourt': 125, 'verre': 200,
-  'tasse': 250, 'cuillere': 15, 'steak': 180, 'filet': 180,
-  'cuisse': 200, 'escalope': 180, 'cote': 180, 'portion': 300
+  'tasse': 250, 'cuillere': 15, 'portion': 300
 };
 
-const VIANDES = ['boeuf', 'steak', 'bifteck', 'poulet', 'porc', 'agneau', 'dinde', 'veau', 'canard', 'lapin', 'merguez', 'chipolata', 'saucisse', 'toulouse', 'escalope', 'cuisse', 'filet', 'rosbif', 'rumsteck', 'entrecote', 'gigot'];
-const POISSONS = ['saumon', 'cabillaud', 'thon', 'maquereau', 'truite', 'lieu', 'dorade', 'sardine', 'crevette', 'poisson'];
+const VIANDES = ['boeuf', 'steak', 'bifteck', 'poulet', 'porc', 'agneau', 'dinde', 'veau', 'canard', 'lapin', 'merguez', 'chipolata', 'saucisse', 'toulouse', 'escalope', 'cuisse', 'filet', 'rosbif', 'rumsteck', 'entrecote', 'entrecôte', 'gigot', 'cote', 'côte'];
+const POISSONS = ['saumon', 'cabillaud', 'thon', 'maquereau', 'truite', 'lieu', 'dorade', 'sardine', 'crevette', 'poisson', 'pave', 'pavé'];
 const BOISSONS = ['jus', 'vin', 'rhum', 'vodka', 'whisky', 'panache', 'panaché', 'boisson', 'eau de vie', 'cognac', 'armagnac'];
 
 function estOeuf(nom) {
@@ -89,18 +88,15 @@ function appliquerDefauts(a) {
     }
   }
 
-  // Viandes et poissons : si pas de grammes explicites, forcer 180g
+  // Viandes et poissons : forcer 180g si pas de grammes explicites (quantite > 10)
   if ((estViande(nom) || estPoisson(nom)) && !estOeuf(nom)) {
-    if (a.unite === 'gramme' && a.quantite <= 10) {
-      // "un steak" -> quantite=1 gramme -> forcer 180g
-      a.quantite = 180;
-    } else if (a.unite !== 'gramme') {
+    if (a.unite !== 'gramme' || a.quantite <= 10) {
       a.unite = 'gramme';
       a.quantite = 180;
     }
   }
 
-  // Boissons : si pas de ml explicites, forcer 150ml
+  // Boissons : forcer 150ml si pas de ml explicites (quantite > 10)
   if (estBoisson(nom)) {
     if (a.unite !== 'ml' || a.quantite <= 10) {
       a.unite = 'ml';
