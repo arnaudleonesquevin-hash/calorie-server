@@ -19,9 +19,29 @@ const poidsPiece = {
   'oeuf': 55, 'orange': 150, 'pomme': 150, 'banane': 120,
   'kiwi': 80, 'poire': 150, 'peche': 150, 'hamburger': 180,
   'biscuit': 15, 'tranche': 30, 'yaourt': 125, 'verre': 200,
-  'tasse': 250, 'cuillere': 15, 'steak': 150, 'filet': 150,
-  'cuisse': 200, 'escalope': 150, 'cote': 180, 'portion': 300
+  'tasse': 250, 'cuillere': 15, 'steak': 180, 'filet': 180,
+  'cuisse': 200, 'escalope': 180, 'cote': 180, 'portion': 300
 };
+
+const VIANDES = ['boeuf', 'steak', 'bifteck', 'poulet', 'porc', 'agneau', 'dinde', 'veau', 'canard', 'lapin', 'merguez', 'chipolata', 'saucisse', 'toulouse', 'escalope', 'cuisse', 'filet', 'rosbif', 'rumsteck', 'entrecote', 'gigot'];
+const POISSONS = ['saumon', 'cabillaud', 'thon', 'maquereau', 'truite', 'lieu', 'dorade', 'sardine', 'crevette', 'poisson'];
+const BOISSONS = ['jus', 'vin', 'rhum', 'vodka', 'whisky', 'panache', 'panaché', 'boisson', 'eau de vie', 'cognac', 'armagnac'];
+
+function estOeuf(nom) {
+  return nom.includes('oeuf') || nom.includes('oeufs') || nom.includes('\u0153uf') || nom.includes('\u0153ufs');
+}
+
+function estViande(nom) {
+  return VIANDES.some(v => nom.includes(v));
+}
+
+function estPoisson(nom) {
+  return POISSONS.some(v => nom.includes(v));
+}
+
+function estBoisson(nom) {
+  return BOISSONS.some(v => nom.includes(v));
+}
 
 function getPoidsPiece(nom) {
   const n = nom.toLowerCase();
@@ -55,22 +75,39 @@ function rechercherCiqual(nomFr) {
 
 function appliquerDefauts(a) {
   const nom = (a.nom_original || '').toLowerCase();
+
   // Oeufs sans precision -> brouilles
-  if ((nom.includes('oeuf') || nom.includes('oeufs')) &&
-      !nom.includes('plat') && !nom.includes('dur') && !nom.includes('coque') && !nom.includes('poche')) {
+  if (estOeuf(nom) && !nom.includes('plat') && !nom.includes('dur') && !nom.includes('coque') && !nom.includes('poche')) {
     a.nom_ciqual = 'oeuf, brouill\u00e9, avec mati\u00e8re grasse';
     a.unite = 'piece';
   }
-  // Steak -> steak hache, toujours en piece de 150g sauf si grammes explicites
+
+  // Steak -> steak hache par defaut
   if (nom.includes('steak') || nom.includes('bifteck')) {
     if (!nom.includes('faux') && !nom.includes('rumsteck')) {
       a.nom_ciqual = 'boeuf, steak hach\u00e9, cuit (aliment moyen)';
     }
-    if (a.unite !== 'gramme') {
-      a.unite = 'piece';
-      if (a.quantite > 10) a.quantite = 1;
+  }
+
+  // Viandes et poissons : si pas de grammes explicites, forcer 180g
+  if ((estViande(nom) || estPoisson(nom)) && !estOeuf(nom)) {
+    if (a.unite === 'gramme' && a.quantite <= 10) {
+      // "un steak" -> quantite=1 gramme -> forcer 180g
+      a.quantite = 180;
+    } else if (a.unite !== 'gramme') {
+      a.unite = 'gramme';
+      a.quantite = 180;
     }
   }
+
+  // Boissons : si pas de ml explicites, forcer 150ml
+  if (estBoisson(nom)) {
+    if (a.unite !== 'ml' || a.quantite <= 10) {
+      a.unite = 'ml';
+      a.quantite = 150;
+    }
+  }
+
   return a;
 }
 
@@ -108,10 +145,10 @@ app.post('/nutrition', async (req, res) => {
       }
 
       const nomLower = (a.nom_original || '').toLowerCase();
-      const forcePiece = nomLower.includes('oeuf') || nomLower.includes('steak') ||
+      const forcePiece = estOeuf(nomLower) ||
         nomLower.includes('orange') || nomLower.includes('pomme') ||
         nomLower.includes('banane') || nomLower.includes('kiwi');
-      if (forcePiece && a.unite !== 'gramme') a.unite = 'piece';
+      if (forcePiece) a.unite = 'piece';
 
       let quantiteG;
       if (a.unite === 'piece') quantiteG = a.quantite * getPoidsPiece(a.nom_original || '');
@@ -142,5 +179,5 @@ app.post('/nutrition', async (req, res) => {
 });
 
 app.listen(process.env.PORT || 3000, '0.0.0.0', () => {
-  console.log('Serveur Ciqual v7 demarre!');
+  console.log('Serveur Ciqual v8 demarre!');
 });
