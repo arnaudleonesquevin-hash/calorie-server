@@ -14,6 +14,7 @@ export default function HomeScreen() {
   const [recalcEnCours, setRecalcEnCours] = useState(-1);
   const texteAccumule = useRef('');
   const texteRef = useRef('');
+  const ecouteRef = useRef(false);
 
   useSpeechRecognitionEvent('result', (event) => {
     if (event.results[0]) {
@@ -26,7 +27,7 @@ export default function HomeScreen() {
   });
 
   useSpeechRecognitionEvent('end', () => {
-    if (ecoute) {
+    if (ecouteRef.current) {
       texteAccumule.current = texteRef.current;
       ExpoSpeechRecognitionModule.start({ lang: 'fr-FR', interimResults: true, continuous: true });
     }
@@ -36,6 +37,7 @@ export default function HomeScreen() {
     if (ecoute) {
       ExpoSpeechRecognitionModule.stop();
       setEcoute(false);
+      ecouteRef.current = false;
       texteAccumule.current = '';
       texteRef.current = '';
     } else {
@@ -45,6 +47,7 @@ export default function HomeScreen() {
         return;
       }
       setEcoute(true);
+      ecouteRef.current = true;
       ExpoSpeechRecognitionModule.start({ lang: 'fr-FR', interimResults: true, continuous: true });
     }
   };
@@ -197,7 +200,7 @@ const styles = StyleSheet.create({
   input: { width: '100%', borderWidth: 1, borderColor: '#ddd', borderRadius: 10, padding: 15, fontSize: 16, marginBottom: 15 },
   button: { backgroundColor: '#FF6B6B', paddingHorizontal: 30, paddingVertical: 15, borderRadius: 30, marginBottom: 15, width: '100%', alignItems: 'center' },
   buttonMicro: { backgroundColor: '#4ECDC4', paddingHorizontal: 30, paddingVertical: 15, borderRadius: 30, width: '100%', alignItems: 'center' },
-  buttonMicroActif: { backgroundColor: '#FF0000', paddingHorizontal: 30, paddingVertify: 15, borderRadius: 30, width: '100%', alignItems: 'center' },
+  buttonMicroActif: { backgroundColor: '#FF0000', paddingHorizontal: 30, paddingVertical: 15, borderRadius: 30, width: '100%', alignItems: 'center' },
   buttonText: { color: '#fff', fontSize: 18, fontWeight: 'bold' },
   alimentRow: { flexDirection: 'row', alignItems: 'center', width: '100%', marginBottom: 10, backgroundColor: '#f9f9f9', borderRadius: 10, padding: 10 },
   alimentInfo: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
