@@ -53,10 +53,27 @@ function rechercherCiqual(nomFr) {
   return meilleurScore > 20 ? meilleur : null;
 }
 
+function appliquerDefauts(a) {
+  const nom = (a.nom_original || '').toLowerCase();
+  // Oeufs sans precision -> brouilles
+  if ((nom.includes('oeuf') || nom.includes('oeufs')) &&
+      !nom.includes('plat') && !nom.includes('dur') && !nom.includes('coque') && !nom.includes('poche')) {
+    a.nom_ciqual = 'oeuf, brouille, avec matiere grasse';
+    a.unite = 'piece';
+  }
+  // Steak sans precision -> steak hache
+  if ((nom.includes('steak') || nom.includes('bifteck')) &&
+      !nom.includes('hache') && !nom.includes('faux') && !nom.includes('rumsteck')) {
+    a.nom_ciqual = 'boeuf, steak hache, cuit (aliment moyen)';
+    a.unite = 'piece';
+  }
+  return a;
+}
+
 app.post('/nutrition', async (req, res) => {
   const { aliment } = req.body;
   try {
-    const prompt = "Tu es un expert en nutrition. Analyse ce repas et reponds UNIQUEMENT avec un tableau JSON valide sans backticks ni explication.\n\nREGLES TRES IMPORTANTES:\n1) Convertis les nombres en toutes lettres en chiffres: trois=3, deux=2, un=1, une=1, quatre=4, cinq=5.\n2) La quantite est toujours UN SEUL NOMBRE. Si le repas dit trois oeufs, quantite=3 et nom_original=oeufs brouilles (sans le nombre dans le nom).\n3) Les oeufs et fruits entiers se comptent TOUJOURS en pieces (unite=piece), JAMAIS en grammes. Exemple : '2 oeufs' = quantite=2, unite=piece.\n4) Les viandes et feculents avec un poids explicite utilisent unite=gramme.\n5) Une portion sans poids = quantite=300, unite=gramme.\n6) Choisis le nom EXACT dans cette liste Ciqual officielle:\n" + listePourClaude + "\n\nSi l aliment n est pas dans la liste, mets null pour nom_ciqual.\n\nFormat JSON strict (le nom_original ne doit JAMAIS contenir de nombre):\n[{\"nom_ciqual\":\"oeuf, brouille, avec matiere grasse\",\"nom_original\":\"oeufs brouilles\",\"quantite\":3,\"unite\":\"piece\"}]\n\nRepas a analyser: " + aliment;
+    const prompt = "Tu es un expert en nutrition. Analyse ce repas et reponds UNIQUEMENT avec un tableau JSON valide sans backticks ni explication.\n\nREGLES TRES IMPORTANTES:\n1) Convertis les nombres en toutes lettres en chiffres: trois=3, deux=2, un=1, une=1, quatre=4, cinq=5.\n2) La quantite est toujours UN SEUL NOMBRE. Si le repas dit trois oeufs, quantite=3 et nom_original=oeufs (sans le nombre dans le nom).\n3) Les oeufs et fruits entiers se comptent TOUJOURS en pieces (unite=piece), JAMAIS en grammes. Exemple : '2 oeufs' = quantite=2, unite=piece.\n4) Les viandes et feculents avec un poids explicite utilisent unite=gramme.\n5) Une portion sans poids = quantite=300, unite=gramme. ATTENTION : cette regle ne s applique JAMAIS aux oeufs.\n6) Choisis le nom EXACT dans cette liste Ciqual officielle:\n" + listePourClaude + "\n\nSi l aliment n est pas dans la liste, mets null pour nom_ciqual.\n\nFormat JSON strict (le nom_original ne doit JAMAIS contenir de nombre):\n[{\"nom_ciqual\":\"oeuf, brouille, avec matiere grasse\",\"nom_original\":\"oeufs\",\"quantite\":3,\"unite\":\"piece\"}]\n\nRepas a analyser: " + aliment;
 
     const claudeResponse = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
@@ -76,6 +93,9 @@ app.post('/nutrition', async (req, res) => {
     const alimentsExtraits = JSON.parse(texte);
 
     const resultats = alimentsExtraits.map((a) => {
+      // Appliquer les defauts avant recherche
+      a = appliquerDefauts(a);
+
       let found = null;
       if (a.nom_ciqual && a.nom_ciqual !== 'null') {
         found = indexCourants[a.nom_ciqual] || indexCiqual[a.nom_ciqual];
@@ -83,6 +103,13 @@ app.post('/nutrition', async (req, res) => {
       if (!found && a.nom_original) {
         found = rechercherCiqual(a.nom_original);
       }
+
+      // Forcer piece pour oeufs et fruits meme si Haiku a mis gramme
+      const nomLower = (a.nom_original || '').toLowerCase();
+      const forcePiece = nomLower.includes('oeuf') || nomLower.includes('steak') ||
+        nomLower.includes('orange') || nomLower.includes('pomme') ||
+        nomLower.includes('banane') || nomLower.includes('kiwi');
+      if (forcePiece) a.unite = 'piece';
 
       let quantiteG;
       if (a.unite === 'piece') quantiteG = a.quantite * getPoidsPiece(a.nom_original || '');
@@ -113,5 +140,5 @@ app.post('/nutrition', async (req, res) => {
 });
 
 app.listen(process.env.PORT || 3000, '0.0.0.0', () => {
-  console.log('Serveur Ciqual v6 demarre!');
+  console.log('Serveur Ciqual v7 demarre!');
 });
