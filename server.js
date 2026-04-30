@@ -40,6 +40,8 @@ const FECULENTS = ['pate', 'p\u00e2te', 'riz', 'couscous', 'quinoa', 'boulgour',
 const BOISSONS = ['jus', 'vin', 'rhum', 'vodka', 'whisky', 'panache', 'panach\u00e9', 'boisson', 'eau de vie', 'cognac', 'armagnac'];
 const LEGUMES = ['haricot vert', 'haricots verts', 'brocoli', 'tomate', 'carotte', 'courgette', 'chou', 'oignon', 'poivron', 'concombre', 'endive', 'poireau', 'asperge', 'artichaut', 'aubergine', 'fenouil', 'betterave', 'navet', 'radis', 'potiron', 'salade', 'epinard', '\u00e9pinard', 'champignon', 'pois gourmand', 'pois gourmands', 'pois mange-tout'];
 const PLATS_COMPOSES = ['ratatouille', 'bourguignon', 'moussaka', 'cassoulet', 'couscous au poulet', 'couscous royal', 'lasagne', 'lasagnes', 'chili', 'blanquette', 'pot-au-feu', 'hachis', 'parmentier', 'quiche', 'gratin', 'navarin', 'legumes farcis', 'l\u00e9gumes farcis', 'risotto'];
+const SAUCES_PETITES = ['pesto', 'ketchup', 'moutarde', 'barbecue', 'sauce soja', 'nuoc mam', 'nuoc-mam'];
+const SAUCES_STANDARD = ['carbonara', 'bolognaise', 'tomate', 'bechamel', 'b\u00e9chamel', 'fromage', 'fromages', 'roquefort', 'poivre', 'curry', 'basquaise', 'poivrons'];
 
 function estOeuf(nom) {
   const n = normaliserNom(nom);
@@ -75,6 +77,16 @@ function estLegume(nom) {
 function estPlatCompose(nom) {
   const n = normaliserNom(nom);
   return PLATS_COMPOSES.some(v => n.includes(normaliserNom(v)));
+}
+
+function estSaucePetite(nom) {
+  const n = normaliserNom(nom);
+  return SAUCES_PETITES.some(v => n.includes(normaliserNom(v)));
+}
+
+function estSauceStandard(nom) {
+  const n = normaliserNom(nom);
+  return n.includes('sauce') && SAUCES_STANDARD.some(v => n.includes(normaliserNom(v)));
 }
 
 function getPoidsPiece(nom) {
@@ -150,6 +162,15 @@ function appliquerDefauts(a) {
     return a;
   }
 
+  // Sauces : portion par defaut selon densite calorique.
+  if (estSaucePetite(nom)) {
+    a.unite = 'gramme';
+    if (quantiteAbsente(a.quantite)) a.quantite = 30;
+  } else if (estSauceStandard(nom)) {
+    a.unite = 'gramme';
+    if (quantiteAbsente(a.quantite)) a.quantite = 80;
+  }
+
   // Plats composes : portion repas moyenne.
   if (estPlatCompose(nom)) {
     a.unite = 'gramme';
@@ -199,7 +220,7 @@ function appliquerDefauts(a) {
 app.post('/nutrition', async (req, res) => {
   const { aliment } = req.body;
   try {
-    const prompt = "Tu es un expert en nutrition. Analyse ce repas et reponds UNIQUEMENT avec un tableau JSON valide sans backticks ni explication.\n\nREGLES TRES IMPORTANTES:\n1) Convertis les nombres en toutes lettres en chiffres: trois=3, deux=2, un=1, une=1, quatre=4, cinq=5.\n2) La quantite est toujours UN SEUL NOMBRE. Le nom_original ne doit JAMAIS contenir de nombre.\n3) Les oeufs, fruits entiers et aliments a l unite se comptent TOUJOURS en pieces (unite=piece). Exemple : '2 oeufs' = quantite=2, unite=piece. Si aucun nombre n est precise pour un aliment a l unite, mets quantite=0.\n4) Si l utilisateur precise un poids en grammes (ex: 200g, 300g), mets unite=gramme et quantite=ce poids exact.\n5) Si l utilisateur ne precise PAS de poids, mets unite=gramme et quantite=0.\n6) Si l utilisateur precise un volume en ml (ex: 250ml), mets unite=ml et quantite=ce volume exact.\n7) Si l utilisateur ne precise PAS de volume pour une boisson, mets unite=ml et quantite=0.\n8) Choisis le nom EXACT dans cette liste Ciqual officielle:\n" + listePourClaude + "\n\nSi l aliment n est pas dans la liste, mets null pour nom_ciqual.\n\nFormat JSON strict:\n[{\"nom_ciqual\":\"boeuf, steak hache, cuit (aliment moyen)\",\"nom_original\":\"steak\",\"quantite\":0,\"unite\":\"gramme\"}]\n\nRepas a analyser: " + aliment;
+    const prompt = "Tu es un expert en nutrition. Analyse ce repas et reponds UNIQUEMENT avec un tableau JSON valide sans backticks ni explication.\n\nREGLES TRES IMPORTANTES:\n1) Convertis les nombres en toutes lettres en chiffres: trois=3, deux=2, un=1, une=1, quatre=4, cinq=5.\n2) La quantite est toujours UN SEUL NOMBRE. Le nom_original ne doit JAMAIS contenir de nombre.\n3) Les oeufs, fruits entiers et aliments a l unite se comptent TOUJOURS en pieces (unite=piece). Exemple : '2 oeufs' = quantite=2, unite=piece. Si aucun nombre n est precise pour un aliment a l unite, mets quantite=0.\n4) Pour les sauces sans quantite precisee, mets unite=gramme et quantite=0. Le serveur appliquera la portion par defaut.\n5) Si l utilisateur precise un poids en grammes (ex: 200g, 300g), mets unite=gramme et quantite=ce poids exact.\n6) Si l utilisateur ne precise PAS de poids, mets unite=gramme et quantite=0.\n7) Si l utilisateur precise un volume en ml (ex: 250ml), mets unite=ml et quantite=ce volume exact.\n8) Si l utilisateur ne precise PAS de volume pour une boisson, mets unite=ml et quantite=0.\n9) Choisis le nom EXACT dans cette liste Ciqual officielle:\n" + listePourClaude + "\n\nSi l aliment n est pas dans la liste, mets null pour nom_ciqual.\n\nFormat JSON strict:\n[{\"nom_ciqual\":\"boeuf, steak hache, cuit (aliment moyen)\",\"nom_original\":\"steak\",\"quantite\":0,\"unite\":\"gramme\"}]\n\nRepas a analyser: " + aliment;
 
     const claudeResponse = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',

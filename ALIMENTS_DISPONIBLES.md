@@ -1,6 +1,6 @@
 # Aliments disponibles dans la liste courante
 
-Total : 169 aliments
+Total : 184 aliments
 
 ## Ajouts recents
 
@@ -31,6 +31,21 @@ Total : 169 aliments
 25. noix de cajou, grillée à sec, non salée - 630 kcal/100g
 26. ratatouille, faite maison (estimation) - 67.6 kcal/100g
 27. pruneau, sec - 229 kcal/100g
+28. sauce pesto, préemballée - 370 kcal/100g
+29. sauce végétale type bolognaise, préemballée - 68 kcal/100g
+30. sauce tomate pour pâtes, faite maison (estimation) - 50 kcal/100g
+31. sauce carbonara, faite maison (estimation) - 260 kcal/100g
+32. sauce béchamel, faite maison (estimation) - 135 kcal/100g
+33. sauce aux fromages, faite maison (estimation) - 230 kcal/100g
+34. sauce roquefort, faite maison (estimation) - 260 kcal/100g
+35. sauce au poivre, faite maison (estimation) - 160 kcal/100g
+36. sauce au curry, préemballée - 77.4 kcal/100g
+37. sauce basquaise ou sauce aux poivrons, préemballée - 63.1 kcal/100g
+38. sauce barbecue, préemballée - 136 kcal/100g
+39. ketchup, préemballé - 99 kcal/100g
+40. moutarde - 152 kcal/100g
+41. moutarde à l'ancienne - 142 kcal/100g
+42. sauce soja, préemballée - 45.5 kcal/100g
 
 ## Liste complete
 
@@ -203,3 +218,18 @@ Total : 169 aliments
 167. noix de cajou, grillée à sec, non salée - 630 kcal/100g
 168. ratatouille, faite maison (estimation) - 67.6 kcal/100g
 169. pruneau, sec - 229 kcal/100g
+170. sauce pesto, préemballée - 370 kcal/100g
+171. sauce végétale type bolognaise, préemballée - 68 kcal/100g
+172. sauce tomate pour pâtes, faite maison (estimation) - 50 kcal/100g
+173. sauce carbonara, faite maison (estimation) - 260 kcal/100g
+174. sauce béchamel, faite maison (estimation) - 135 kcal/100g
+175. sauce aux fromages, faite maison (estimation) - 230 kcal/100g
+176. sauce roquefort, faite maison (estimation) - 260 kcal/100g
+177. sauce au poivre, faite maison (estimation) - 160 kcal/100g
+178. sauce au curry, préemballée - 77.4 kcal/100g
+179. sauce basquaise ou sauce aux poivrons, préemballée - 63.1 kcal/100g
+180. sauce barbecue, préemballée - 136 kcal/100g
+181. ketchup, préemballé - 99 kcal/100g
+182. moutarde - 152 kcal/100g
+183. moutarde à l'ancienne - 142 kcal/100g
+184. sauce soja, préemballée - 45.5 kcal/100g

@@ -25,5 +25,20 @@
   {"nom": "noix de cajou, grillée, non salée", "calories": 618.0, "proteines": 19.8, "glucides": 26.7, "lipides": 49.5, "sucres": 5.91, "fibres": 3.33},
   {"nom": "noix de cajou, grillée à sec, non salée", "calories": 630.0, "proteines": 21.2, "glucides": 23.5, "lipides": 52.5, "sucres": 3.0, "fibres": 4.0},
   {"nom": "ratatouille, faite maison (estimation)", "calories": 67.6, "proteines": 1.1, "glucides": 2.7, "lipides": 5.3, "sucres": 2.6, "fibres": 1.5},
-  {"nom": "pruneau, sec", "calories": 229.0, "proteines": 1.63, "glucides": 49.4, "lipides": 0.4, "sucres": 38.1, "fibres": 5.1}
+  {"nom": "pruneau, sec", "calories": 229.0, "proteines": 1.63, "glucides": 49.4, "lipides": 0.4, "sucres": 38.1, "fibres": 5.1},
+  {"nom": "sauce pesto, préemballée", "calories": 370.0, "proteines": 3.94, "glucides": 6.6, "lipides": 35.4, "sucres": 3.2, "fibres": 2.5},
+  {"nom": "sauce végétale type bolognaise, préemballée", "calories": 68.0, "proteines": 3.56, "glucides": 5.05, "lipides": 3.0, "sucres": 5.05, "fibres": 2.46},
+  {"nom": "sauce tomate pour pâtes, faite maison (estimation)", "calories": 50.0, "proteines": 1.5, "glucides": 7.0, "lipides": 1.5, "sucres": 5.0, "fibres": 2.0},
+  {"nom": "sauce carbonara, faite maison (estimation)", "calories": 260.0, "proteines": 8.0, "glucides": 3.0, "lipides": 23.0, "sucres": 2.0, "fibres": 0.2},
+  {"nom": "sauce béchamel, faite maison (estimation)", "calories": 135.0, "proteines": 4.0, "glucides": 9.0, "lipides": 9.0, "sucres": 4.0, "fibres": 0.2},
+  {"nom": "sauce aux fromages, faite maison (estimation)", "calories": 230.0, "proteines": 8.0, "glucides": 4.0, "lipides": 20.0, "sucres": 2.0, "fibres": 0.1},
+  {"nom": "sauce roquefort, faite maison (estimation)", "calories": 260.0, "proteines": 7.0, "glucides": 2.0, "lipides": 25.0, "sucres": 1.5, "fibres": 0.0},
+  {"nom": "sauce au poivre, faite maison (estimation)", "calories": 160.0, "proteines": 2.5, "glucides": 5.0, "lipides": 14.0, "sucres": 2.0, "fibres": 0.5},
+  {"nom": "sauce au curry, préemballée", "calories": 77.4, "proteines": 1.02, "glucides": 10.6, "lipides": 3.16, "sucres": 5.83, "fibres": 1.28},
+  {"nom": "sauce basquaise ou sauce aux poivrons, préemballée", "calories": 63.1, "proteines": 1.17, "glucides": 7.41, "lipides": 2.71, "sucres": 4.46, "fibres": 2.09},
+  {"nom": "sauce barbecue, préemballée", "calories": 136.0, "proteines": 0.56, "glucides": 30.3, "lipides": 0.6, "sucres": 27.5, "fibres": 1.2},
+  {"nom": "ketchup, préemballé", "calories": 99.0, "proteines": 1.27, "glucides": 21.4, "lipides": 0.19, "sucres": 20.8, "fibres": 1.15},
+  {"nom": "moutarde", "calories": 152.0, "proteines": 6.92, "glucides": 4.33, "lipides": 11.2, "sucres": 1.66, "fibres": 1.0},
+  {"nom": "moutarde à l'ancienne", "calories": 142.0, "proteines": 6.6, "glucides": 2.2, "lipides": 9.9, "sucres": 2.2, "fibres": 4.5},
+  {"nom": "sauce soja, préemballée", "calories": 45.5, "proteines": 7.08, "glucides": 3.64, "lipides": 0.1, "sucres": 1.32, "fibres": 0.86}
 ]
