@@ -22,47 +22,65 @@ const poidsPiece = {
   'tasse': 250, 'cuillere': 15, 'portion': 300
 };
 
+function normaliserNom(nom) {
+  return (nom || '')
+    .toLowerCase()
+    .replace(/\u0153/g, 'oe')
+    .replace(/\u00e6/g, 'ae')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '');
+}
+
 const VIANDES = ['boeuf', 'b\u0153uf', 'steak', 'bifteck', 'poulet', 'porc', 'agneau', 'dinde', 'veau', 'canard', 'lapin', 'merguez', 'chipolata', 'saucisse', 'toulouse', 'escalope', 'cuisse', 'filet', 'rosbif', 'rumsteck', 'entrecote', 'entrecôte', 'gigot', 'cote', 'côte'];
 const POISSONS = ['saumon', 'cabillaud', 'thon', 'maquereau', 'truite', 'lieu', 'dorade', 'sardine', 'crevette', 'poisson', 'pave', 'pav\u00e9'];
 const FECULENTS = ['pate', 'p\u00e2te', 'riz', 'couscous', 'quinoa', 'boulgour', 'lentille', 'pois chiche', 'polenta', 'semoule'];
 const BOISSONS = ['jus', 'vin', 'rhum', 'vodka', 'whisky', 'panache', 'panach\u00e9', 'boisson', 'eau de vie', 'cognac', 'armagnac'];
 
 function estOeuf(nom) {
-  if (nom.includes('boeuf') || nom.includes('b\u0153uf')) return false;
-  return nom.includes('oeuf') || nom.includes('oeufs') || nom.includes('\u0153uf') || nom.includes('\u0153ufs');
+  const n = normaliserNom(nom);
+  if (n.includes('boeuf')) return false;
+  return n.includes('oeuf') || n.includes('oeufs');
 }
 
 function estViande(nom) {
-  return VIANDES.some(v => nom.includes(v));
+  const n = normaliserNom(nom);
+  return VIANDES.some(v => n.includes(normaliserNom(v)));
 }
 
 function estPoisson(nom) {
-  return POISSONS.some(v => nom.includes(v));
+  const n = normaliserNom(nom);
+  return POISSONS.some(v => n.includes(normaliserNom(v)));
 }
 
 function estFeculent(nom) {
-  return FECULENTS.some(v => nom.includes(v));
+  const n = normaliserNom(nom);
+  return FECULENTS.some(v => n.includes(normaliserNom(v)));
 }
 
 function estBoisson(nom) {
-  return BOISSONS.some(v => nom.includes(v));
+  const n = normaliserNom(nom);
+  return BOISSONS.some(v => n.includes(normaliserNom(v)));
 }
 
 function getPoidsPiece(nom) {
-  const n = nom.toLowerCase();
+  const n = normaliserNom(nom);
   for (const [k, v] of Object.entries(poidsPiece)) {
-    if (n.includes(k)) return v;
+    if (k === 'oeuf') {
+      if (estOeuf(n)) return v;
+      continue;
+    }
+    if (n.includes(normaliserNom(k))) return v;
   }
   return 100;
 }
 
 function rechercherCiqual(nomFr) {
-  const nom = nomFr.toLowerCase().trim();
+  const nom = normaliserNom(nomFr).trim();
   let meilleur = null;
   let meilleurScore = 0;
   for (const a of ciqual) {
     if (a.calories <= 0) continue;
-    const n = a.nom;
+    const n = normaliserNom(a.nom);
     if (n === nom) return a;
     let score = 0;
     if (n.includes(nom)) score = nom.length / n.length * 100;
@@ -79,7 +97,7 @@ function rechercherCiqual(nomFr) {
 }
 
 function appliquerDefauts(a) {
-  const nom = (a.nom_original || '').toLowerCase();
+  const nom = normaliserNom(a.nom_original);
 
   // Oeufs sans precision -> brouilles
   if (estOeuf(nom) && !nom.includes('plat') && !nom.includes('dur') && !nom.includes('coque') && !nom.includes('poche')) {
@@ -155,7 +173,7 @@ app.post('/nutrition', async (req, res) => {
         found = rechercherCiqual(a.nom_original);
       }
 
-      const nomLower = (a.nom_original || '').toLowerCase();
+      const nomLower = normaliserNom(a.nom_original);
       const forcePiece = estOeuf(nomLower) ||
         nomLower.includes('orange') || nomLower.includes('pomme') ||
         nomLower.includes('banane') || nomLower.includes('kiwi');
