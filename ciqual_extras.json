@@ -40,5 +40,9 @@
   {"nom": "ketchup, préemballé", "calories": 99.0, "proteines": 1.27, "glucides": 21.4, "lipides": 0.19, "sucres": 20.8, "fibres": 1.15},
   {"nom": "moutarde", "calories": 152.0, "proteines": 6.92, "glucides": 4.33, "lipides": 11.2, "sucres": 1.66, "fibres": 1.0},
   {"nom": "moutarde à l'ancienne", "calories": 142.0, "proteines": 6.6, "glucides": 2.2, "lipides": 9.9, "sucres": 2.2, "fibres": 4.5},
-  {"nom": "sauce soja, préemballée", "calories": 45.5, "proteines": 7.08, "glucides": 3.64, "lipides": 0.1, "sucres": 1.32, "fibres": 0.86}
+  {"nom": "sauce soja, préemballée", "calories": 45.5, "proteines": 7.08, "glucides": 3.64, "lipides": 0.1, "sucres": 1.32, "fibres": 0.86},
+  {"nom": "frites de pommes de terre, surgelées, cuites en friteuse", "calories": 285.0, "proteines": 3.28, "glucides": 39.4, "lipides": 11.9, "sucres": 0.69, "fibres": 3.9},
+  {"nom": "tiramisu, préemballé", "calories": 241.0, "proteines": 4.25, "glucides": 30.4, "lipides": 9.8, "sucres": 19.5, "fibres": 1.2},
+  {"nom": "cola, sucré", "calories": 41.8, "proteines": 0.093, "glucides": 10.2, "lipides": 0.062, "sucres": 10.2, "fibres": 0.0},
+  {"nom": "cola, non sucré, avec édulcorants", "calories": 1.3, "proteines": 0.081, "glucides": 0.11, "lipides": 0.053, "sucres": 0.11, "fibres": 0.003}
 ]

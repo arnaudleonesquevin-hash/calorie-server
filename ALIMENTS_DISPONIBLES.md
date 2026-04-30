@@ -1,6 +1,6 @@
 # Aliments disponibles dans la liste courante
 
-Total : 184 aliments
+Total : 188 aliments
 
 ## Ajouts recents
 
@@ -46,6 +46,10 @@ Total : 184 aliments
 40. moutarde - 152 kcal/100g
 41. moutarde à l'ancienne - 142 kcal/100g
 42. sauce soja, préemballée - 45.5 kcal/100g
+43. frites de pommes de terre, surgelées, cuites en friteuse - 285 kcal/100g
+44. tiramisu, préemballé - 241 kcal/100g
+45. cola, sucré - 41.8 kcal/100g
+46. cola, non sucré, avec édulcorants - 1.3 kcal/100g
 
 ## Liste complete
 
@@ -233,3 +237,7 @@ Total : 184 aliments
 182. moutarde - 152 kcal/100g
 183. moutarde à l'ancienne - 142 kcal/100g
 184. sauce soja, préemballée - 45.5 kcal/100g
+185. frites de pommes de terre, surgelées, cuites en friteuse - 285 kcal/100g
+186. tiramisu, préemballé - 241 kcal/100g
+187. cola, sucré - 41.8 kcal/100g
+188. cola, non sucré, avec édulcorants - 1.3 kcal/100g

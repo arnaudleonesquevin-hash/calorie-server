@@ -42,6 +42,11 @@ const LEGUMES = ['haricot vert', 'haricots verts', 'brocoli', 'tomate', 'carotte
 const PLATS_COMPOSES = ['ratatouille', 'bourguignon', 'moussaka', 'cassoulet', 'couscous au poulet', 'couscous royal', 'lasagne', 'lasagnes', 'chili', 'blanquette', 'pot-au-feu', 'hachis', 'parmentier', 'quiche', 'gratin', 'navarin', 'legumes farcis', 'l\u00e9gumes farcis', 'risotto'];
 const SAUCES_PETITES = ['pesto', 'ketchup', 'moutarde', 'barbecue', 'sauce soja', 'nuoc mam', 'nuoc-mam'];
 const SAUCES_STANDARD = ['carbonara', 'bolognaise', 'tomate', 'bechamel', 'b\u00e9chamel', 'fromage', 'fromages', 'roquefort', 'poivre', 'curry', 'basquaise', 'poivrons'];
+const FRITES = ['frite', 'frites'];
+const DESSERTS_PORTION = ['tiramisu', 'dessert', 'gateau', 'g\u00e2teau', 'mousse', 'creme dessert', 'cr\u00e8me dessert', 'profiterole', 'baba au rhum'];
+const SODAS = ['cola', 'coca', 'coca-cola', 'soda', 'limonade'];
+const VINS = ['vin', 'verre de vin'];
+const ALCOOLS_FORTS = ['rhum', 'vodka', 'whisky', 'cognac', 'armagnac', 'eau de vie', 'gin', 'tequila', 'pastis'];
 
 function estOeuf(nom) {
   const n = normaliserNom(nom);
@@ -65,8 +70,15 @@ function estFeculent(nom) {
 }
 
 function estBoisson(nom) {
+  if (estSoda(nom) || estVin(nom) || estAlcoolFort(nom)) return true;
   const n = normaliserNom(nom);
-  return BOISSONS.some(v => n.includes(normaliserNom(v)));
+  const mots = motsSignificatifs(nom);
+  return BOISSONS.some((v) => {
+    const nv = normaliserNom(v);
+    if (nv === 'vin' || nv === 'rhum' || nv === 'vodka' || nv === 'whisky' || nv === 'cognac' || nv === 'armagnac') return false;
+    if (nv.includes(' ')) return n.includes(nv);
+    return mots.includes(nv);
+  });
 }
 
 function estLegume(nom) {
@@ -87,6 +99,43 @@ function estSaucePetite(nom) {
 function estSauceStandard(nom) {
   const n = normaliserNom(nom);
   return n.includes('sauce') && SAUCES_STANDARD.some(v => n.includes(normaliserNom(v)));
+}
+
+function estFrites(nom) {
+  const n = normaliserNom(nom);
+  return FRITES.some(v => n.includes(normaliserNom(v)));
+}
+
+function estDessertPortion(nom) {
+  const n = normaliserNom(nom);
+  return DESSERTS_PORTION.some(v => n.includes(normaliserNom(v)));
+}
+
+function estSoda(nom) {
+  const mots = motsSignificatifs(nom);
+  return SODAS.some(v => mots.includes(normaliserNom(v)));
+}
+
+function estVin(nom) {
+  const n = normaliserNom(nom);
+  const mots = motsSignificatifs(nom);
+  return n.includes('verre de vin') || n.includes('verres de vin') || n.includes('vin rouge') || n.includes('vin blanc') || n.includes('vin rose') || n.includes('vin ros\u00e9') || (mots.includes('vin') && mots.includes('verre')) || mots.join(' ') === 'vin';
+}
+
+function estAlcoolFort(nom) {
+  const n = normaliserNom(nom);
+  if (n.includes('baba')) return false;
+  return ALCOOLS_FORTS.some(v => n.includes(normaliserNom(v)));
+}
+
+function appliquerDefautVolume(a, mlParUnite) {
+  const quantite = Number(a.quantite) || 0;
+  if (a.unite === 'piece' && quantite > 0) {
+    a.quantite = quantite * mlParUnite;
+  } else if (quantiteAbsente(a.quantite)) {
+    a.quantite = mlParUnite;
+  }
+  a.unite = 'ml';
 }
 
 function getPoidsPiece(nom) {
@@ -141,7 +190,7 @@ function rechercherCiqual(nomFr) {
     else if (nom.includes(n) && n.length >= 4) score = 70;
     else {
       const motsN = motsSignificatifs(a.nom);
-      const communs = mots.filter(m => motsN.some(mn => mn === m || mn.includes(m) || m.includes(mn)));
+      const communs = mots.filter(m => motsN.some(mn => mn === m));
       score = communs.length / Math.max(mots.length, 1) * 100;
     }
     if (score > meilleurScore) { meilleurScore = score; meilleur = a; }
@@ -151,6 +200,47 @@ function rechercherCiqual(nomFr) {
 
 function appliquerDefauts(a) {
   const nom = normaliserNom(a.nom_original);
+
+  // Boissons avec portion standard.
+  if (estSoda(nom)) {
+    if (nom.includes('zero') || nom.includes('light') || nom.includes('sans sucre')) {
+      a.nom_ciqual = 'cola, non sucr\u00e9, avec \u00e9dulcorants';
+    } else {
+      a.nom_ciqual = 'cola, sucr\u00e9';
+    }
+    appliquerDefautVolume(a, 330);
+    return a;
+  }
+
+  // Frites : portion moyenne.
+  if (estFrites(nom)) {
+    a.nom_ciqual = 'frites de pommes de terre, surgel\u00e9es, cuites en friteuse';
+    const quantite = Number(a.quantite) || 0;
+    if (a.unite === 'piece' && quantite > 0) a.quantite = quantite * 150;
+    else if (quantiteAbsente(a.quantite)) a.quantite = 150;
+    a.unite = 'gramme';
+    return a;
+  }
+
+  // Desserts individuels : portion moyenne de 100g.
+  if (estDessertPortion(nom)) {
+    const quantite = Number(a.quantite) || 0;
+    if (a.unite === 'piece' && quantite > 0) a.quantite = quantite * 100;
+    else if (quantiteAbsente(a.quantite)) a.quantite = 100;
+    a.unite = 'gramme';
+    if (nom.includes('tiramisu')) a.nom_ciqual = 'tiramisu, pr\u00e9emball\u00e9';
+    return a;
+  }
+
+  if (estAlcoolFort(nom)) {
+    appliquerDefautVolume(a, 50);
+    return a;
+  }
+
+  if (estVin(nom)) {
+    appliquerDefautVolume(a, 150);
+    return a;
+  }
 
   // Aliments a l'unite sans nombre -> 1 piece.
   if (estAlimentPiece(nom)) {
