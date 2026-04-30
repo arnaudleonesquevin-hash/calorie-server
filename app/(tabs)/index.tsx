@@ -2,13 +2,32 @@ import { View, Text, StyleSheet, TouchableOpacity, TextInput, Alert, ScrollView 
 import { useState } from 'react';
 import { useSpeechRecognitionEvent, ExpoSpeechRecognitionModule } from 'expo-speech-recognition';
 
+type Aliment = {
+  nom?: string;
+  calories: number;
+  proteines: number;
+  glucides: number;
+  lipides: number;
+  sucres: number;
+  fibres: number;
+  _nom?: string;
+  _quantite?: string;
+  _unite?: string;
+};
+
+type AlimentParse = {
+  nom: string;
+  quantite: string;
+  unite: string;
+};
+
 export default function HomeScreen() {
   const [texte, setTexte] = useState('');
   const [totalCalories, setTotalCalories] = useState(0);
   const [chargement, setChargement] = useState(false);
   const [ecoute, setEcoute] = useState(false);
-  const [aliments, setAliments] = useState([]);
-  const [etape, setEtape] = useState('saisie');
+  const [aliments, setAliments] = useState<Aliment[]>([]);
+  const [etape, setEtape] = useState<'saisie' | 'confirmation'>('saisie');
   const [nouvelAliment, setNouvelAliment] = useState('');
   const [ajoutEnCours, setAjoutEnCours] = useState(false);
   const [recalcEnCours, setRecalcEnCours] = useState(-1);
@@ -40,7 +59,7 @@ export default function HomeScreen() {
     }
   };
 
-  const parseAliment = (a) => {
+  const parseAliment = (a: Aliment): AlimentParse => {
     // Extraire nom, quantite, unite depuis le format "3 x oeufs" ou "200 g riz" ou "250 ml jus"
     const nomComplet = a.nom || '';
     let quantite = '';
@@ -65,30 +84,43 @@ export default function HomeScreen() {
       nom = matchMl[2];
     }
 
+    if (Object.prototype.hasOwnProperty.call(a, '_nom')) nom = a._nom || '';
+    if (Object.prototype.hasOwnProperty.call(a, '_quantite')) quantite = a._quantite || '';
+    if (Object.prototype.hasOwnProperty.call(a, '_unite')) unite = a._unite || '';
+
     return { nom, quantite, unite };
   };
 
-  const formatQuantite = (quantite, unite) => {
+  const formatQuantite = (quantite: string, unite: string) => {
+    if (!quantite) return '';
     if (unite === 'gramme') return quantite + 'g';
     if (unite === 'ml') return quantite + 'ml';
     return quantite; // piece : juste le chiffre
   };
 
-  const reconstruireNom = (nom, quantite, unite) => {
+  const reconstruireNom = (nom: string, quantite: string, unite: string) => {
+    if (!quantite) return nom;
     if (unite === 'piece') return quantite + ' x ' + nom;
     if (unite === 'ml') return quantite + ' ml ' + nom;
     return quantite + ' g ' + nom;
   };
 
-  const calculerCalories = async (nomComplet) => {
+  const preparerTexteApi = (parsed: AlimentParse) => {
+    if (!parsed.quantite) return parsed.nom;
+    if (parsed.unite === 'piece') return parsed.quantite + ' ' + parsed.nom;
+    if (parsed.unite === 'ml') return parsed.nom + ' ' + parsed.quantite + 'ml';
+    return parsed.nom + ' ' + parsed.quantite + 'g';
+  };
+
+  const calculerCalories = async (nomComplet: string): Promise<Aliment> => {
     const response = await fetch('https://calorie-server-production.up.railway.app/nutrition', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ aliment: nomComplet }),
     });
     const data = await response.json();
-    if (Array.isArray(data)) return data[0];
-    return data;
+    if (Array.isArray(data)) return data[0] as Aliment;
+    return data as Aliment;
   };
 
   const analyserRepas = async () => {
@@ -101,7 +133,7 @@ export default function HomeScreen() {
         body: JSON.stringify({ aliment: texte }),
       });
       const data = await response.json();
-      setAliments(data);
+      setAliments(Array.isArray(data) ? data : [data]);
       setEtape('confirmation');
     } catch (e) {
       Alert.alert('Erreur', String(e));
@@ -109,25 +141,30 @@ export default function HomeScreen() {
     setChargement(false);
   };
 
-  const modifierNom = (index, valeur) => {
+  const modifierNom = (index: number, valeur: string) => {
     const nouveaux = [...aliments];
     const parsed = parseAliment(nouveaux[index]);
     nouveaux[index].nom = reconstruireNom(valeur, parsed.quantite, parsed.unite);
     nouveaux[index]._nom = valeur;
+    nouveaux[index]._quantite = parsed.quantite;
+    nouveaux[index]._unite = parsed.unite;
     setAliments(nouveaux);
   };
 
-  const modifierQuantite = (index, valeur) => {
+  const modifierQuantite = (index: number, valeur: string) => {
     const nouveaux = [...aliments];
     const parsed = parseAliment(nouveaux[index]);
     nouveaux[index].nom = reconstruireNom(parsed.nom, valeur, parsed.unite);
+    nouveaux[index]._nom = parsed.nom;
     nouveaux[index]._quantite = valeur;
+    nouveaux[index]._unite = parsed.unite;
     setAliments(nouveaux);
   };
 
-  const recalculerAliment = async (index) => {
+  const recalculerAliment = async (index: number) => {
     const a = aliments[index];
-    const nomComplet = a.nom;
+    const parsed = parseAliment(a);
+    const nomComplet = preparerTexteApi(parsed);
     if (!nomComplet) return;
     setRecalcEnCours(index);
     try {
@@ -135,6 +172,10 @@ export default function HomeScreen() {
       const nouveaux = [...aliments];
       nouveaux[index] = {
         ...nouveaux[index],
+        nom: reconstruireNom(parsed.nom, parsed.quantite, parsed.unite),
+        _nom: parsed.nom,
+        _quantite: parsed.quantite,
+        _unite: parsed.unite,
         calories: info.calories,
         proteines: info.proteines,
         glucides: info.glucides,
@@ -149,7 +190,7 @@ export default function HomeScreen() {
     setRecalcEnCours(-1);
   };
 
-  const supprimerAliment = (index) => {
+  const supprimerAliment = (index: number) => {
     setAliments(aliments.filter((_, i) => i !== index));
   };
 
@@ -200,7 +241,7 @@ export default function HomeScreen() {
               <TextInput
                 style={[styles.colQuantite]}
                 value={formatQuantite(parsed.quantite, parsed.unite)}
-                onChangeText={(v) => modifierQuantite(i, v.replace(/[gml]/g, ''))}
+                onChangeText={(v) => modifierQuantite(i, v.replace(/[^0-9]/g, ''))}
                 keyboardType="numeric"
               />
               <Text style={styles.colCal}>{a.calories} kcal</Text>

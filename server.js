@@ -74,6 +74,23 @@ function getPoidsPiece(nom) {
   return 100;
 }
 
+function quantiteAbsente(quantite) {
+  return quantite === 0 || quantite === '0' || quantite === null || quantite === undefined || quantite === '';
+}
+
+function estAlimentPiece(nom) {
+  const n = normaliserNom(nom);
+  if (estOeuf(n)) return true;
+
+  const unitesDeMesure = ['verre', 'tasse', 'cuillere', 'portion', 'tranche'];
+  if (estBoisson(n) && !unitesDeMesure.some(u => n.includes(u))) return false;
+
+  return Object.keys(poidsPiece).some((k) => {
+    if (k === 'oeuf') return false;
+    return n.includes(normaliserNom(k));
+  });
+}
+
 function rechercherCiqual(nomFr) {
   const nom = normaliserNom(nomFr).trim();
   let meilleur = null;
@@ -99,10 +116,13 @@ function rechercherCiqual(nomFr) {
 function appliquerDefauts(a) {
   const nom = normaliserNom(a.nom_original);
 
-  // Oeufs sans precision -> brouilles
-  if (estOeuf(nom) && !nom.includes('plat') && !nom.includes('dur') && !nom.includes('coque') && !nom.includes('poche')) {
-    a.nom_ciqual = 'oeuf, brouill\u00e9, avec mati\u00e8re grasse';
+  // Aliments a l'unite sans nombre -> 1 piece.
+  if (estAlimentPiece(nom)) {
     a.unite = 'piece';
+    if (quantiteAbsente(a.quantite)) a.quantite = 1;
+    if (estOeuf(nom) && !nom.includes('plat') && !nom.includes('dur') && !nom.includes('coque') && !nom.includes('poche')) {
+      a.nom_ciqual = 'oeuf, brouill\u00e9, avec mati\u00e8re grasse';
+    }
     return a;
   }
 
@@ -143,7 +163,7 @@ function appliquerDefauts(a) {
 app.post('/nutrition', async (req, res) => {
   const { aliment } = req.body;
   try {
-    const prompt = "Tu es un expert en nutrition. Analyse ce repas et reponds UNIQUEMENT avec un tableau JSON valide sans backticks ni explication.\n\nREGLES TRES IMPORTANTES:\n1) Convertis les nombres en toutes lettres en chiffres: trois=3, deux=2, un=1, une=1, quatre=4, cinq=5.\n2) La quantite est toujours UN SEUL NOMBRE. Le nom_original ne doit JAMAIS contenir de nombre.\n3) Les oeufs et fruits entiers se comptent TOUJOURS en pieces (unite=piece). Exemple : '2 oeufs' = quantite=2, unite=piece.\n4) Si l utilisateur precise un poids en grammes (ex: 200g, 300g), mets unite=gramme et quantite=ce poids exact.\n5) Si l utilisateur ne precise PAS de poids, mets unite=gramme et quantite=0.\n6) Si l utilisateur precise un volume en ml (ex: 250ml), mets unite=ml et quantite=ce volume exact.\n7) Si l utilisateur ne precise PAS de volume pour une boisson, mets unite=ml et quantite=0.\n8) Choisis le nom EXACT dans cette liste Ciqual officielle:\n" + listePourClaude + "\n\nSi l aliment n est pas dans la liste, mets null pour nom_ciqual.\n\nFormat JSON strict:\n[{\"nom_ciqual\":\"boeuf, steak hache, cuit (aliment moyen)\",\"nom_original\":\"steak\",\"quantite\":0,\"unite\":\"gramme\"}]\n\nRepas a analyser: " + aliment;
+    const prompt = "Tu es un expert en nutrition. Analyse ce repas et reponds UNIQUEMENT avec un tableau JSON valide sans backticks ni explication.\n\nREGLES TRES IMPORTANTES:\n1) Convertis les nombres en toutes lettres en chiffres: trois=3, deux=2, un=1, une=1, quatre=4, cinq=5.\n2) La quantite est toujours UN SEUL NOMBRE. Le nom_original ne doit JAMAIS contenir de nombre.\n3) Les oeufs, fruits entiers et aliments a l unite se comptent TOUJOURS en pieces (unite=piece). Exemple : '2 oeufs' = quantite=2, unite=piece. Si aucun nombre n est precise pour un aliment a l unite, mets quantite=0.\n4) Si l utilisateur precise un poids en grammes (ex: 200g, 300g), mets unite=gramme et quantite=ce poids exact.\n5) Si l utilisateur ne precise PAS de poids, mets unite=gramme et quantite=0.\n6) Si l utilisateur precise un volume en ml (ex: 250ml), mets unite=ml et quantite=ce volume exact.\n7) Si l utilisateur ne precise PAS de volume pour une boisson, mets unite=ml et quantite=0.\n8) Choisis le nom EXACT dans cette liste Ciqual officielle:\n" + listePourClaude + "\n\nSi l aliment n est pas dans la liste, mets null pour nom_ciqual.\n\nFormat JSON strict:\n[{\"nom_ciqual\":\"boeuf, steak hache, cuit (aliment moyen)\",\"nom_original\":\"steak\",\"quantite\":0,\"unite\":\"gramme\"}]\n\nRepas a analyser: " + aliment;
 
     const claudeResponse = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
@@ -174,15 +194,17 @@ app.post('/nutrition', async (req, res) => {
       }
 
       const nomLower = normaliserNom(a.nom_original);
-      const forcePiece = estOeuf(nomLower) ||
-        nomLower.includes('orange') || nomLower.includes('pomme') ||
-        nomLower.includes('banane') || nomLower.includes('kiwi');
-      if (forcePiece) a.unite = 'piece';
+      const forcePiece = estAlimentPiece(nomLower);
+      if (forcePiece) {
+        a.unite = 'piece';
+        if (quantiteAbsente(a.quantite)) a.quantite = 1;
+      }
 
       let quantiteG;
-      if (a.unite === 'piece') quantiteG = a.quantite * getPoidsPiece(a.nom_original || '');
-      else if (a.unite === 'ml') quantiteG = a.quantite;
-      else quantiteG = a.quantite;
+      const quantite = Number(a.quantite) || 0;
+      if (a.unite === 'piece') quantiteG = quantite * getPoidsPiece(a.nom_original || '');
+      else if (a.unite === 'ml') quantiteG = quantite;
+      else quantiteG = quantite;
       const facteur = quantiteG / 100;
 
       if (found) {
