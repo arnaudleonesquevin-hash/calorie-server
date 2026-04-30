@@ -8,12 +8,15 @@ app.use(express.json());
 
 const ciqual = JSON.parse(fs.readFileSync('./ciqual.json', 'utf8'));
 const courants = JSON.parse(fs.readFileSync('./ciqual_courants.json', 'utf8'));
+const extras = fs.existsSync('./ciqual_extras.json') ? JSON.parse(fs.readFileSync('./ciqual_extras.json', 'utf8')) : [];
+const alimentsCourants = [...courants, ...extras];
+const alimentsRecherche = [...extras, ...courants, ...ciqual];
 const indexCiqual = {};
 for (const a of ciqual) indexCiqual[a.nom] = a;
 const indexCourants = {};
-for (const a of courants) indexCourants[a.nom] = a;
+for (const a of alimentsCourants) indexCourants[a.nom] = a;
 
-const listePourClaude = courants.map(a => a.nom).join('\n');
+const listePourClaude = alimentsCourants.map(a => a.nom).join('\n');
 
 const poidsPiece = {
   'oeuf': 55, 'orange': 150, 'pomme': 150, 'banane': 120,
@@ -33,8 +36,10 @@ function normaliserNom(nom) {
 
 const VIANDES = ['boeuf', 'b\u0153uf', 'steak', 'bifteck', 'poulet', 'porc', 'agneau', 'dinde', 'veau', 'canard', 'lapin', 'merguez', 'chipolata', 'saucisse', 'toulouse', 'escalope', 'cuisse', 'filet', 'rosbif', 'rumsteck', 'entrecote', 'entrecôte', 'gigot', 'cote', 'côte'];
 const POISSONS = ['saumon', 'cabillaud', 'thon', 'maquereau', 'truite', 'lieu', 'dorade', 'sardine', 'crevette', 'poisson', 'pave', 'pav\u00e9'];
-const FECULENTS = ['pate', 'p\u00e2te', 'riz', 'couscous', 'quinoa', 'boulgour', 'lentille', 'pois chiche', 'polenta', 'semoule'];
+const FECULENTS = ['pate', 'p\u00e2te', 'riz', 'couscous', 'quinoa', 'boulgour', 'lentille', 'pois chiche', 'polenta', 'semoule', 'haricot rouge', 'haricots rouges', 'haricot blanc', 'haricots blancs', 'flageolet', 'flageolets', 'haricot coco', 'haricots coco', 'feve', 'feves', 'f\u00e8ve', 'f\u00e8ves', 'mais doux', 'ma\u00efs doux'];
 const BOISSONS = ['jus', 'vin', 'rhum', 'vodka', 'whisky', 'panache', 'panach\u00e9', 'boisson', 'eau de vie', 'cognac', 'armagnac'];
+const LEGUMES = ['haricot vert', 'haricots verts', 'brocoli', 'tomate', 'carotte', 'courgette', 'chou', 'oignon', 'poivron', 'concombre', 'endive', 'poireau', 'asperge', 'artichaut', 'aubergine', 'fenouil', 'betterave', 'navet', 'radis', 'potiron', 'salade', 'epinard', '\u00e9pinard', 'champignon', 'pois gourmand', 'pois gourmands', 'pois mange-tout'];
+const PLATS_COMPOSES = ['ratatouille', 'bourguignon', 'moussaka', 'cassoulet', 'couscous au poulet', 'couscous royal', 'lasagne', 'lasagnes', 'chili', 'blanquette', 'pot-au-feu', 'hachis', 'parmentier', 'quiche', 'gratin', 'navarin', 'legumes farcis', 'l\u00e9gumes farcis', 'risotto'];
 
 function estOeuf(nom) {
   const n = normaliserNom(nom);
@@ -62,6 +67,16 @@ function estBoisson(nom) {
   return BOISSONS.some(v => n.includes(normaliserNom(v)));
 }
 
+function estLegume(nom) {
+  const n = normaliserNom(nom);
+  return LEGUMES.some(v => n.includes(normaliserNom(v)));
+}
+
+function estPlatCompose(nom) {
+  const n = normaliserNom(nom);
+  return PLATS_COMPOSES.some(v => n.includes(normaliserNom(v)));
+}
+
 function getPoidsPiece(nom) {
   const n = normaliserNom(nom);
   for (const [k, v] of Object.entries(poidsPiece)) {
@@ -76,6 +91,14 @@ function getPoidsPiece(nom) {
 
 function quantiteAbsente(quantite) {
   return quantite === 0 || quantite === '0' || quantite === null || quantite === undefined || quantite === '';
+}
+
+function motsSignificatifs(texte) {
+  return normaliserNom(texte)
+    .replace(/[^a-z0-9 ]/g, ' ')
+    .split(/\s+/)
+    .filter(m => m.length > 2)
+    .map(m => (m.endsWith('s') && m.length > 4 ? m.slice(0, -1) : m));
 }
 
 function estAlimentPiece(nom) {
@@ -93,24 +116,25 @@ function estAlimentPiece(nom) {
 
 function rechercherCiqual(nomFr) {
   const nom = normaliserNom(nomFr).trim();
+  const mots = motsSignificatifs(nomFr);
   let meilleur = null;
   let meilleurScore = 0;
-  for (const a of ciqual) {
+  for (const a of alimentsRecherche) {
     if (a.calories <= 0) continue;
     const n = normaliserNom(a.nom);
     if (n === nom) return a;
     let score = 0;
-    if (n.includes(nom)) score = nom.length / n.length * 100;
-    else if (nom.includes(n)) score = n.length / nom.length * 80;
+    if (n.startsWith(nom)) score = 100;
+    else if (n.includes(nom) && nom.length >= 4) score = 80;
+    else if (nom.includes(n) && n.length >= 4) score = 70;
     else {
-      const mots = nom.split(' ').filter(m => m.length > 2);
-      const motsN = n.split(' ');
-      const communs = mots.filter(m => motsN.some(mn => mn.includes(m) || m.includes(mn)));
-      score = communs.length / Math.max(mots.length, 1) * 60;
+      const motsN = motsSignificatifs(a.nom);
+      const communs = mots.filter(m => motsN.some(mn => mn === m || mn.includes(m) || m.includes(mn)));
+      score = communs.length / Math.max(mots.length, 1) * 100;
     }
     if (score > meilleurScore) { meilleurScore = score; meilleur = a; }
   }
-  return meilleurScore > 20 ? meilleur : null;
+  return meilleurScore >= 50 ? meilleur : null;
 }
 
 function appliquerDefauts(a) {
@@ -126,6 +150,12 @@ function appliquerDefauts(a) {
     return a;
   }
 
+  // Plats composes : portion repas moyenne.
+  if (estPlatCompose(nom)) {
+    a.unite = 'gramme';
+    if (quantiteAbsente(a.quantite)) a.quantite = 300;
+  }
+
   // Steak -> steak hache par defaut
   if (nom.includes('steak') || nom.includes('bifteck')) {
     if (!nom.includes('faux') && !nom.includes('rumsteck')) {
@@ -136,25 +166,31 @@ function appliquerDefauts(a) {
   // Viandes : 180g si pas de poids precise (quantite=0)
   if (estViande(nom) && !estOeuf(nom)) {
     a.unite = 'gramme';
-    if (a.quantite === 0 || a.quantite === null) a.quantite = 180;
+    if (quantiteAbsente(a.quantite)) a.quantite = 180;
   }
 
   // Poissons : 180g si pas de poids precise
   if (estPoisson(nom)) {
     a.unite = 'gramme';
-    if (a.quantite === 0 || a.quantite === null) a.quantite = 180;
+    if (quantiteAbsente(a.quantite)) a.quantite = 180;
   }
 
   // Feculents : 180g si pas de poids precise
   if (estFeculent(nom) && !estViande(nom)) {
     a.unite = 'gramme';
-    if (a.quantite === 0 || a.quantite === null) a.quantite = 180;
+    if (quantiteAbsente(a.quantite)) a.quantite = 180;
+  }
+
+  // Legumes : portion moyenne plus petite que les feculents.
+  if (estLegume(nom) && !estFeculent(nom) && !estViande(nom) && !estPoisson(nom)) {
+    a.unite = 'gramme';
+    if (quantiteAbsente(a.quantite)) a.quantite = 150;
   }
 
   // Boissons : 150ml si pas de quantite precise
   if (estBoisson(nom)) {
     a.unite = 'ml';
-    if (a.quantite === 0 || a.quantite === null) a.quantite = 150;
+    if (quantiteAbsente(a.quantite)) a.quantite = 150;
   }
 
   return a;
