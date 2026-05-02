@@ -47,6 +47,9 @@ const DESSERTS_PORTION = ['tiramisu', 'dessert', 'gateau', 'g\u00e2teau', 'mouss
 const SODAS = ['cola', 'coca', 'coca-cola', 'soda', 'limonade'];
 const VINS = ['vin', 'verre de vin'];
 const ALCOOLS_FORTS = ['rhum', 'vodka', 'whisky', 'cognac', 'armagnac', 'eau de vie', 'gin', 'tequila', 'pastis'];
+const PAINS = ['pain', 'pain complet', 'pain integral', 'pain int\u00e9gral', 'pain de mie', 'tartine', 'baguette'];
+const PATES_A_TARTINER = ['nutella', 'pate a tartiner', 'p\u00e2te a tartiner', 'pate \u00e0 tartiner', 'p\u00e2te \u00e0 tartiner', 'chocolat noisette'];
+const BEURRES_CACAHUETE = ['beurre de cacahuete', 'beurre de cacahu\u00e8te', 'peanut butter'];
 
 function estOeuf(nom) {
   const n = normaliserNom(nom);
@@ -98,7 +101,21 @@ function estSaucePetite(nom) {
 
 function estSauceStandard(nom) {
   const n = normaliserNom(nom);
-  return n.includes('sauce') && SAUCES_STANDARD.some(v => n.includes(normaliserNom(v)));
+  const mots = motsSignificatifs(nom);
+  const estPlatPates = mots.some(m => ['pate', 'spaghetti', 'tagliatelle'].includes(m));
+  if (estPlatPates) return false;
+
+  return SAUCES_STANDARD.some((v) => {
+    const nv = normaliserNom(v);
+    return (n.includes('sauce') && n.includes(nv)) || (mots.length === 1 && mots[0] === nv);
+  });
+}
+
+function getNomCiqualSauce(nom) {
+  const n = normaliserNom(nom);
+  if (n.includes('carbonara')) return 'sauce carbonara, faite maison (estimation)';
+  if (n.includes('bolognaise')) return 'sauce bolognaise, faite maison (estimation)';
+  return null;
 }
 
 function estFrites(nom) {
@@ -126,6 +143,46 @@ function estAlcoolFort(nom) {
   const n = normaliserNom(nom);
   if (n.includes('baba')) return false;
   return ALCOOLS_FORTS.some(v => n.includes(normaliserNom(v)));
+}
+
+function estPain(nom) {
+  const n = normaliserNom(nom);
+  if (n.includes('pain au chocolat')) return false;
+  return PAINS.some(v => n.includes(normaliserNom(v)));
+}
+
+function getNomCiqualPain(nom) {
+  const n = normaliserNom(nom);
+  if (n.includes('complet') || n.includes('integral')) return 'pain complet ou int\u00e9gral (\u00e0 la farine t150)';
+  if (n.includes('baguette')) return 'pain, baguette, courante';
+  return 'pain courant, 400g ou boule';
+}
+
+function estPateATartiner(nom) {
+  const n = normaliserNom(nom);
+  return PATES_A_TARTINER.some(v => n.includes(normaliserNom(v)));
+}
+
+function estBeurreCacahuete(nom) {
+  const n = normaliserNom(nom);
+  return BEURRES_CACAHUETE.some(v => n.includes(normaliserNom(v)));
+}
+
+function estBeurre(nom) {
+  const n = normaliserNom(nom);
+  const mots = motsSignificatifs(nom);
+  if (estBeurreCacahuete(n) || n.includes('haricot beurre') || n.includes('beurre de cacao') || n.includes('beurre de karite')) return false;
+  return mots.includes('beurre');
+}
+
+function appliquerDefautGrammes(a, grammesParUnite) {
+  const quantite = Number(a.quantite) || 0;
+  if (a.unite === 'piece' && quantite > 0) {
+    a.quantite = quantite * grammesParUnite;
+  } else if (quantiteAbsente(a.quantite)) {
+    a.quantite = grammesParUnite;
+  }
+  a.unite = 'gramme';
 }
 
 function appliquerDefautVolume(a, mlParUnite) {
@@ -199,6 +256,13 @@ function rechercherCiqual(nomFr) {
 }
 
 function appliquerDefauts(a) {
+  if (a.nom_original) {
+    a.nom_original = String(a.nom_original)
+      .trim()
+      .replace(/^(de|du|des)\s+/i, '')
+      .replace(/^d['’]\s*/i, '');
+  }
+
   const nom = normaliserNom(a.nom_original);
 
   // Boissons avec portion standard.
@@ -242,6 +306,31 @@ function appliquerDefauts(a) {
     return a;
   }
 
+  // Tartines, pain et produits a tartiner.
+  if (estPateATartiner(nom)) {
+    a.nom_ciqual = 'pate a tartiner chocolat noisette';
+    appliquerDefautGrammes(a, 20);
+    return a;
+  }
+
+  if (estBeurreCacahuete(nom)) {
+    a.nom_ciqual = 'beurre de cacahuete';
+    appliquerDefautGrammes(a, 20);
+    return a;
+  }
+
+  if (estBeurre(nom)) {
+    a.nom_ciqual = 'beurre doux';
+    appliquerDefautGrammes(a, 10);
+    return a;
+  }
+
+  if (estPain(nom)) {
+    a.nom_ciqual = getNomCiqualPain(nom);
+    appliquerDefautGrammes(a, 50);
+    return a;
+  }
+
   // Aliments a l'unite sans nombre -> 1 piece.
   if (estAlimentPiece(nom)) {
     a.unite = 'piece';
@@ -257,6 +346,8 @@ function appliquerDefauts(a) {
     a.unite = 'gramme';
     if (quantiteAbsente(a.quantite)) a.quantite = 30;
   } else if (estSauceStandard(nom)) {
+    const nomSauce = getNomCiqualSauce(nom);
+    if (nomSauce) a.nom_ciqual = nomSauce;
     a.unite = 'gramme';
     if (quantiteAbsente(a.quantite)) a.quantite = 80;
   }
@@ -310,7 +401,7 @@ function appliquerDefauts(a) {
 app.post('/nutrition', async (req, res) => {
   const { aliment } = req.body;
   try {
-    const prompt = "Tu es un expert en nutrition. Analyse ce repas et reponds UNIQUEMENT avec un tableau JSON valide sans backticks ni explication.\n\nREGLES TRES IMPORTANTES:\n1) Convertis les nombres en toutes lettres en chiffres: trois=3, deux=2, un=1, une=1, quatre=4, cinq=5.\n2) La quantite est toujours UN SEUL NOMBRE. Le nom_original ne doit JAMAIS contenir de nombre.\n3) Les oeufs, fruits entiers et aliments a l unite se comptent TOUJOURS en pieces (unite=piece). Exemple : '2 oeufs' = quantite=2, unite=piece. Si aucun nombre n est precise pour un aliment a l unite, mets quantite=0.\n4) Pour les sauces sans quantite precisee, mets unite=gramme et quantite=0. Le serveur appliquera la portion par defaut.\n5) Si l utilisateur precise un poids en grammes (ex: 200g, 300g), mets unite=gramme et quantite=ce poids exact.\n6) Si l utilisateur ne precise PAS de poids, mets unite=gramme et quantite=0.\n7) Si l utilisateur precise un volume en ml (ex: 250ml), mets unite=ml et quantite=ce volume exact.\n8) Si l utilisateur ne precise PAS de volume pour une boisson, mets unite=ml et quantite=0.\n9) Choisis le nom EXACT dans cette liste Ciqual officielle:\n" + listePourClaude + "\n\nSi l aliment n est pas dans la liste, mets null pour nom_ciqual.\n\nFormat JSON strict:\n[{\"nom_ciqual\":\"boeuf, steak hache, cuit (aliment moyen)\",\"nom_original\":\"steak\",\"quantite\":0,\"unite\":\"gramme\"}]\n\nRepas a analyser: " + aliment;
+    const prompt = "Tu es un expert en nutrition. Analyse ce repas et reponds UNIQUEMENT avec un tableau JSON valide sans backticks ni explication.\n\nREGLES TRES IMPORTANTES:\n1) Convertis les nombres en toutes lettres en chiffres: trois=3, deux=2, un=1, une=1, quatre=4, cinq=5.\n2) La quantite est toujours UN SEUL NOMBRE. Le nom_original ne doit JAMAIS contenir de nombre.\n3) Les oeufs, fruits entiers et aliments a l unite se comptent TOUJOURS en pieces (unite=piece). Exemple : '2 oeufs' = quantite=2, unite=piece. Si aucun nombre n est precise pour un aliment a l unite, mets quantite=0.\n4) Pour les sauces sans quantite precisee, mets unite=gramme et quantite=0. Le serveur appliquera la portion par defaut.\n5) Si l utilisateur dit pates carbonara ou pates bolognaise, separe TOUJOURS en deux aliments: pates + carbonara/bolognaise.\n6) Si l utilisateur dit tartine de beurre, tartine de Nutella, pain beurre, pain complet beurre de cacahuete, separe TOUJOURS le pain/tartine et la garniture.\n7) Nutella, pate a tartiner et pate a tartiner chocolat noisette veulent dire le meme aliment.\n8) Si l utilisateur precise un poids en grammes (ex: 200g, 300g), mets unite=gramme et quantite=ce poids exact.\n9) Si l utilisateur ne precise PAS de poids, mets unite=gramme et quantite=0.\n10) Si l utilisateur precise un volume en ml (ex: 250ml), mets unite=ml et quantite=ce volume exact.\n11) Si l utilisateur ne precise PAS de volume pour une boisson, mets unite=ml et quantite=0.\n12) Choisis le nom EXACT dans cette liste Ciqual officielle:\n" + listePourClaude + "\n\nSi l aliment n est pas dans la liste, mets null pour nom_ciqual.\n\nFormat JSON strict:\n[{\"nom_ciqual\":\"boeuf, steak hache, cuit (aliment moyen)\",\"nom_original\":\"steak\",\"quantite\":0,\"unite\":\"gramme\"}]\n\nRepas a analyser: " + aliment;
 
     const claudeResponse = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
@@ -341,7 +432,7 @@ app.post('/nutrition', async (req, res) => {
       }
 
       const nomLower = normaliserNom(a.nom_original);
-      const forcePiece = estAlimentPiece(nomLower);
+      const forcePiece = estAlimentPiece(nomLower) && a.unite !== 'gramme' && a.unite !== 'ml';
       if (forcePiece) {
         a.unite = 'piece';
         if (quantiteAbsente(a.quantite)) a.quantite = 1;

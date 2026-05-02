@@ -1,6 +1,6 @@
 # Aliments disponibles dans la liste courante
 
-Total : 188 aliments
+Total : 192 aliments
 
 ## Ajouts recents
 
@@ -50,6 +50,10 @@ Total : 188 aliments
 44. tiramisu, préemballé - 241 kcal/100g
 45. cola, sucré - 41.8 kcal/100g
 46. cola, non sucré, avec édulcorants - 1.3 kcal/100g
+47. sauce bolognaise, faite maison (estimation) - 110 kcal/100g
+48. beurre doux - 753 kcal/100g
+49. beurre de cacahuete - 588 kcal/100g
+50. pate a tartiner chocolat noisette - 539 kcal/100g
 
 ## Liste complete
 
@@ -241,3 +245,7 @@ Total : 188 aliments
 186. tiramisu, préemballé - 241 kcal/100g
 187. cola, sucré - 41.8 kcal/100g
 188. cola, non sucré, avec édulcorants - 1.3 kcal/100g
+189. sauce bolognaise, faite maison (estimation) - 110 kcal/100g
+190. beurre doux - 753 kcal/100g
+191. beurre de cacahuete - 588 kcal/100g
+192. pate a tartiner chocolat noisette - 539 kcal/100g

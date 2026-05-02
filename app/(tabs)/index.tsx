@@ -1,5 +1,5 @@
 import { View, Text, StyleSheet, TouchableOpacity, TextInput, Alert, ScrollView } from 'react-native';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { useSpeechRecognitionEvent, ExpoSpeechRecognitionModule } from 'expo-speech-recognition';
 
 type Aliment = {
@@ -21,9 +21,45 @@ type AlimentParse = {
   unite: string;
 };
 
+const SPEECH_OPTIONS = { lang: 'fr-FR', interimResults: true, continuous: true };
+
+const nettoyerTexte = (valeur: string) => valeur.trim().replace(/\s+/g, ' ');
+
+const ajouterSegmentDictee = (base: string, segment: string) => {
+  const texteBase = nettoyerTexte(base);
+  const texteSegment = nettoyerTexte(segment);
+
+  if (!texteSegment) return texteBase;
+  if (!texteBase) return texteSegment;
+  if (texteSegment.startsWith(texteBase)) return texteSegment;
+  if (texteBase.endsWith(texteSegment)) return texteBase;
+
+  return texteBase + ' ' + texteSegment;
+};
+
+const assemblerDictee = (texteFinal: string, texteIntermediaire: string) => {
+  const final = nettoyerTexte(texteFinal);
+  const intermediaire = nettoyerTexte(texteIntermediaire);
+
+  if (!intermediaire) return final;
+  if (!final) return intermediaire;
+  if (intermediaire.startsWith(final)) return intermediaire;
+  if (final.endsWith(intermediaire)) return final;
+
+  return final + ' ' + intermediaire;
+};
+
+const formatMacro = (valeur: number) => {
+  const arrondi = Math.round((valeur || 0) * 10) / 10;
+  return String(arrondi).replace('.', ',');
+};
+
 export default function HomeScreen() {
   const [texte, setTexte] = useState('');
   const [totalCalories, setTotalCalories] = useState(0);
+  const [totalProteines, setTotalProteines] = useState(0);
+  const [totalGlucides, setTotalGlucides] = useState(0);
+  const [totalLipides, setTotalLipides] = useState(0);
   const [chargement, setChargement] = useState(false);
   const [ecoute, setEcoute] = useState(false);
   const [aliments, setAliments] = useState<Aliment[]>([]);
@@ -31,31 +67,75 @@ export default function HomeScreen() {
   const [nouvelAliment, setNouvelAliment] = useState('');
   const [ajoutEnCours, setAjoutEnCours] = useState(false);
   const [recalcEnCours, setRecalcEnCours] = useState(-1);
+  const texteFinalDicteeRef = useRef('');
+  const texteIntermediaireDicteeRef = useRef('');
+  const ecouteRef = useRef(false);
+  const ignorerResultatsDicteeRef = useRef(false);
 
   useSpeechRecognitionEvent('result', (event) => {
+    if (ignorerResultatsDicteeRef.current) return;
+
     if (event.results[0]) {
-      setTexte(event.results[0].transcript);
+      const transcript = event.results[0].transcript;
+
+      if (event.isFinal) {
+        const nouveauTexte = ajouterSegmentDictee(texteFinalDicteeRef.current, transcript);
+        texteFinalDicteeRef.current = nouveauTexte;
+        texteIntermediaireDicteeRef.current = '';
+        setTexte(nouveauTexte);
+      } else {
+        texteIntermediaireDicteeRef.current = transcript;
+        setTexte(assemblerDictee(texteFinalDicteeRef.current, transcript));
+      }
     }
   });
 
   useSpeechRecognitionEvent('end', () => {
-    if (ecoute) {
-      ExpoSpeechRecognitionModule.start({ lang: 'fr-FR', interimResults: true, continuous: true });
+    if (ecouteRef.current) {
+      if (texteIntermediaireDicteeRef.current) {
+        const nouveauTexte = ajouterSegmentDictee(texteFinalDicteeRef.current, texteIntermediaireDicteeRef.current);
+        texteFinalDicteeRef.current = nouveauTexte;
+        texteIntermediaireDicteeRef.current = '';
+        setTexte(nouveauTexte);
+      }
+
+      ExpoSpeechRecognitionModule.start(SPEECH_OPTIONS);
     }
   });
 
+  const modifierTexte = (valeur: string) => {
+    texteFinalDicteeRef.current = valeur;
+    texteIntermediaireDicteeRef.current = '';
+    setTexte(valeur);
+  };
+
+  const couperMicro = (mode: 'stop' | 'abort') => {
+    ecouteRef.current = false;
+    setEcoute(false);
+
+    try {
+      if (mode === 'abort') ExpoSpeechRecognitionModule.abort();
+      else ExpoSpeechRecognitionModule.stop();
+    } catch {
+      // Le module peut deja etre arrete selon l'etat natif du telephone.
+    }
+  };
+
   const toggleDictee = async () => {
-    if (ecoute) {
-      ExpoSpeechRecognitionModule.stop();
-      setEcoute(false);
+    if (ecouteRef.current) {
+      couperMicro('stop');
     } else {
       const { granted } = await ExpoSpeechRecognitionModule.requestPermissionsAsync();
       if (!granted) {
         Alert.alert('Permission refusee', 'Autorise le micro dans les parametres');
         return;
       }
+      texteFinalDicteeRef.current = nettoyerTexte(texte);
+      texteIntermediaireDicteeRef.current = '';
+      ignorerResultatsDicteeRef.current = false;
+      ecouteRef.current = true;
       setEcoute(true);
-      ExpoSpeechRecognitionModule.start({ lang: 'fr-FR', interimResults: true, continuous: true });
+      ExpoSpeechRecognitionModule.start(SPEECH_OPTIONS);
     }
   };
 
@@ -124,13 +204,23 @@ export default function HomeScreen() {
   };
 
   const analyserRepas = async () => {
-    if (!texte) return;
+    const texteAAnalyser = nettoyerTexte(texte);
+    if (!texteAAnalyser) return;
+
+    if (ecouteRef.current) {
+      ignorerResultatsDicteeRef.current = true;
+      couperMicro('abort');
+    }
+
+    texteFinalDicteeRef.current = texteAAnalyser;
+    texteIntermediaireDicteeRef.current = '';
+    setTexte(texteAAnalyser);
     setChargement(true);
     try {
       const response = await fetch('https://calorie-server-production.up.railway.app/nutrition', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ aliment: texte }),
+        body: JSON.stringify({ aliment: texteAAnalyser }),
       });
       const data = await response.json();
       setAliments(Array.isArray(data) ? data : [data]);
@@ -207,19 +297,54 @@ export default function HomeScreen() {
     setAjoutEnCours(false);
   };
 
+  const totalRepasCalories = aliments.reduce((sum, a) => sum + (a.calories || 0), 0);
+  const totalRepasProteines = aliments.reduce((sum, a) => sum + (a.proteines || 0), 0);
+  const totalRepasGlucides = aliments.reduce((sum, a) => sum + (a.glucides || 0), 0);
+  const totalRepasLipides = aliments.reduce((sum, a) => sum + (a.lipides || 0), 0);
+
   const confirmer = () => {
-    const total = aliments.reduce((sum, a) => sum + a.calories, 0);
-    setTotalCalories(prev => prev + total);
+    setTotalCalories(prev => prev + totalRepasCalories);
+    setTotalProteines(prev => Math.round((prev + totalRepasProteines) * 10) / 10);
+    setTotalGlucides(prev => Math.round((prev + totalRepasGlucides) * 10) / 10);
+    setTotalLipides(prev => Math.round((prev + totalRepasLipides) * 10) / 10);
     setEtape('saisie');
     setTexte('');
+    texteFinalDicteeRef.current = '';
+    texteIntermediaireDicteeRef.current = '';
+    ignorerResultatsDicteeRef.current = true;
     setAliments([]);
-    Alert.alert('Ajoute !', 'Total repas: ' + total + ' kcal');
+    Alert.alert('Ajoute !', 'Total repas: ' + totalRepasCalories + ' kcal');
+  };
+
+  const recommencer = () => {
+    ignorerResultatsDicteeRef.current = true;
+    couperMicro('abort');
+    setEtape('saisie');
+    setTexte('');
+    texteFinalDicteeRef.current = '';
+    texteIntermediaireDicteeRef.current = '';
+    setAliments([]);
+    setNouvelAliment('');
   };
 
   if (etape === 'confirmation') {
     return (
       <ScrollView contentContainerStyle={styles.container}>
         <Text style={styles.title}>Confirme ton repas</Text>
+        <View style={styles.macroSummary}>
+          <View style={styles.macroItem}>
+            <Text style={styles.macroValue}>{formatMacro(totalRepasProteines)}g</Text>
+            <Text style={styles.macroLabel}>Proteines</Text>
+          </View>
+          <View style={styles.macroItem}>
+            <Text style={styles.macroValue}>{formatMacro(totalRepasGlucides)}g</Text>
+            <Text style={styles.macroLabel}>Glucides</Text>
+          </View>
+          <View style={styles.macroItem}>
+            <Text style={styles.macroValue}>{formatMacro(totalRepasLipides)}g</Text>
+            <Text style={styles.macroLabel}>Lipides</Text>
+          </View>
+        </View>
 
         {/* En-tête colonnes */}
         <View style={styles.headerRow}>
@@ -232,26 +357,33 @@ export default function HomeScreen() {
         {aliments.map((a, i) => {
           const parsed = parseAliment(a);
           return (
-            <View key={i} style={styles.alimentRow}>
-              <TextInput
-                style={[styles.colNom]}
-                value={parsed.nom}
-                onChangeText={(v) => modifierNom(i, v)}
-              />
-              <TextInput
-                style={[styles.colQuantite]}
-                value={formatQuantite(parsed.quantite, parsed.unite)}
-                onChangeText={(v) => modifierQuantite(i, v.replace(/[^0-9]/g, ''))}
-                keyboardType="numeric"
-              />
-              <Text style={styles.colCal}>{a.calories} kcal</Text>
-              <View style={styles.alimentBtns}>
-                <TouchableOpacity onPress={() => recalculerAliment(i)} style={styles.btnRecalc}>
-                  <Text style={styles.btnRecalcText}>{recalcEnCours === i ? '...' : 'OK'}</Text>
-                </TouchableOpacity>
-                <TouchableOpacity onPress={() => supprimerAliment(i)} style={styles.btnSupprimer}>
-                  <Text style={styles.btnSupprimerText}>X</Text>
-                </TouchableOpacity>
+            <View key={i} style={styles.alimentCard}>
+              <View style={styles.alimentRow}>
+                <TextInput
+                  style={[styles.colNom]}
+                  value={parsed.nom}
+                  onChangeText={(v) => modifierNom(i, v)}
+                />
+                <TextInput
+                  style={[styles.colQuantite]}
+                  value={formatQuantite(parsed.quantite, parsed.unite)}
+                  onChangeText={(v) => modifierQuantite(i, v.replace(/[^0-9]/g, ''))}
+                  keyboardType="numeric"
+                />
+                <Text style={styles.colCal}>{a.calories} kcal</Text>
+                <View style={styles.alimentBtns}>
+                  <TouchableOpacity onPress={() => recalculerAliment(i)} style={styles.btnRecalc}>
+                    <Text style={styles.btnRecalcText}>{recalcEnCours === i ? '...' : 'OK'}</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity onPress={() => supprimerAliment(i)} style={styles.btnSupprimer}>
+                    <Text style={styles.btnSupprimerText}>X</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+              <View style={styles.macroLine}>
+                <Text style={styles.macroLineText}>P {formatMacro(a.proteines)}g</Text>
+                <Text style={styles.macroLineText}>G {formatMacro(a.glucides)}g</Text>
+                <Text style={styles.macroLineText}>L {formatMacro(a.lipides)}g</Text>
               </View>
             </View>
           );
@@ -272,7 +404,7 @@ export default function HomeScreen() {
         <TouchableOpacity style={styles.button} onPress={confirmer}>
           <Text style={styles.buttonText}>Confirmer</Text>
         </TouchableOpacity>
-        <TouchableOpacity style={styles.buttonMicro} onPress={() => setEtape('saisie')}>
+        <TouchableOpacity style={styles.buttonMicro} onPress={recommencer}>
           <Text style={styles.buttonText}>Recommencer</Text>
         </TouchableOpacity>
       </ScrollView>
@@ -284,7 +416,21 @@ export default function HomeScreen() {
       <Text style={styles.title}>Mes Calories</Text>
       <Text style={styles.calories}>{totalCalories}</Text>
       <Text style={styles.subtitle}>calories aujourdhui</Text>
-      <TextInput style={styles.input} placeholder="Ex: steak 200g, 2 oeufs..." value={texte} onChangeText={setTexte} />
+      <View style={styles.macroSummary}>
+        <View style={styles.macroItem}>
+          <Text style={styles.macroValue}>{formatMacro(totalProteines)}g</Text>
+          <Text style={styles.macroLabel}>Proteines</Text>
+        </View>
+        <View style={styles.macroItem}>
+          <Text style={styles.macroValue}>{formatMacro(totalGlucides)}g</Text>
+          <Text style={styles.macroLabel}>Glucides</Text>
+        </View>
+        <View style={styles.macroItem}>
+          <Text style={styles.macroValue}>{formatMacro(totalLipides)}g</Text>
+          <Text style={styles.macroLabel}>Lipides</Text>
+        </View>
+      </View>
+      <TextInput style={styles.input} placeholder="Ex: steak 200g, 2 oeufs..." value={texte} onChangeText={modifierTexte} />
       <TouchableOpacity style={styles.button} onPress={analyserRepas}>
         <Text style={styles.buttonText}>{chargement ? 'Analyse...' : 'Analyser'}</Text>
       </TouchableOpacity>
@@ -299,7 +445,11 @@ const styles = StyleSheet.create({
   container: { flexGrow: 1, backgroundColor: '#fff', alignItems: 'center', justifyContent: 'center', padding: 20 },
   title: { fontSize: 28, fontWeight: 'bold', marginBottom: 20 },
   calories: { fontSize: 80, fontWeight: 'bold', color: '#FF6B6B' },
-  subtitle: { fontSize: 18, color: '#999', marginBottom: 40 },
+  subtitle: { fontSize: 18, color: '#999', marginBottom: 16 },
+  macroSummary: { flexDirection: 'row', width: '100%', backgroundColor: '#f9f9f9', borderRadius: 10, padding: 12, marginBottom: 20 },
+  macroItem: { flex: 1, alignItems: 'center' },
+  macroValue: { fontSize: 18, fontWeight: 'bold', color: '#FF6B6B' },
+  macroLabel: { fontSize: 12, color: '#999', marginTop: 2 },
   input: { width: '100%', borderWidth: 1, borderColor: '#ddd', borderRadius: 10, padding: 15, fontSize: 16, marginBottom: 15 },
   button: { backgroundColor: '#FF6B6B', paddingHorizontal: 30, paddingVertical: 15, borderRadius: 30, marginBottom: 15, width: '100%', alignItems: 'center' },
   buttonMicro: { backgroundColor: '#4ECDC4', paddingHorizontal: 30, paddingVertical: 15, borderRadius: 30, width: '100%', alignItems: 'center' },
@@ -307,10 +457,13 @@ const styles = StyleSheet.create({
   buttonText: { color: '#fff', fontSize: 18, fontWeight: 'bold' },
   headerRow: { flexDirection: 'row', width: '100%', paddingHorizontal: 5, marginBottom: 5 },
   headerText: { fontSize: 12, color: '#999', fontWeight: 'bold' },
-  alimentRow: { flexDirection: 'row', alignItems: 'center', width: '100%', marginBottom: 8, backgroundColor: '#f9f9f9', borderRadius: 10, padding: 8 },
+  alimentCard: { width: '100%', marginBottom: 8, backgroundColor: '#f9f9f9', borderRadius: 10, padding: 8 },
+  alimentRow: { flexDirection: 'row', alignItems: 'center', width: '100%' },
   colNom: { flex: 2, fontSize: 14, borderBottomWidth: 1, borderColor: '#ddd', marginRight: 6 },
   colQuantite: { flex: 1, fontSize: 14, borderBottomWidth: 1, borderColor: '#ddd', textAlign: 'center', marginRight: 6 },
   colCal: { flex: 1, fontSize: 13, color: '#FF6B6B', fontWeight: 'bold', textAlign: 'right', marginRight: 6 },
+  macroLine: { flexDirection: 'row', marginTop: 6, paddingLeft: 2 },
+  macroLineText: { fontSize: 12, color: '#777', marginRight: 14 },
   alimentBtns: { flexDirection: 'row' },
   btnRecalc: { backgroundColor: '#4ECDC4', borderRadius: 15, width: 32, height: 32, alignItems: 'center', justifyContent: 'center', marginRight: 4 },
   btnRecalcText: { color: '#fff', fontSize: 11, fontWeight: 'bold' },

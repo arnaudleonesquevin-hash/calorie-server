@@ -44,5 +44,9 @@
   {"nom": "frites de pommes de terre, surgelées, cuites en friteuse", "calories": 285.0, "proteines": 3.28, "glucides": 39.4, "lipides": 11.9, "sucres": 0.69, "fibres": 3.9},
   {"nom": "tiramisu, préemballé", "calories": 241.0, "proteines": 4.25, "glucides": 30.4, "lipides": 9.8, "sucres": 19.5, "fibres": 1.2},
   {"nom": "cola, sucré", "calories": 41.8, "proteines": 0.093, "glucides": 10.2, "lipides": 0.062, "sucres": 10.2, "fibres": 0.0},
-  {"nom": "cola, non sucré, avec édulcorants", "calories": 1.3, "proteines": 0.081, "glucides": 0.11, "lipides": 0.053, "sucres": 0.11, "fibres": 0.003}
+  {"nom": "cola, non sucré, avec édulcorants", "calories": 1.3, "proteines": 0.081, "glucides": 0.11, "lipides": 0.053, "sucres": 0.11, "fibres": 0.003},
+  {"nom": "sauce bolognaise, faite maison (estimation)", "calories": 110.0, "proteines": 6.0, "glucides": 6.0, "lipides": 6.0, "sucres": 4.0, "fibres": 1.5},
+  {"nom": "beurre doux", "calories": 753.0, "proteines": 0.7, "glucides": 0.9, "lipides": 82.9, "sucres": 0.9, "fibres": 0.0},
+  {"nom": "beurre de cacahuete", "calories": 588.0, "proteines": 25.0, "glucides": 20.0, "lipides": 50.0, "sucres": 9.0, "fibres": 6.0},
+  {"nom": "pate a tartiner chocolat noisette", "calories": 539.0, "proteines": 6.3, "glucides": 57.5, "lipides": 30.9, "sucres": 56.3, "fibres": 3.4}
 ]
