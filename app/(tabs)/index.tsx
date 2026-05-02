@@ -1,5 +1,6 @@
 import { View, Text, StyleSheet, TouchableOpacity, TextInput, Alert, ScrollView } from 'react-native';
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { useLocalSearchParams } from 'expo-router';
 import { useSpeechRecognitionEvent, ExpoSpeechRecognitionModule } from 'expo-speech-recognition';
 
 type Aliment = {
@@ -55,6 +56,7 @@ const formatMacro = (valeur: number) => {
 };
 
 export default function HomeScreen() {
+  const params = useLocalSearchParams<{ scanned?: string; scanId?: string }>();
   const [texte, setTexte] = useState('');
   const [totalCalories, setTotalCalories] = useState(0);
   const [totalProteines, setTotalProteines] = useState(0);
@@ -71,6 +73,25 @@ export default function HomeScreen() {
   const texteIntermediaireDicteeRef = useRef('');
   const ecouteRef = useRef(false);
   const ignorerResultatsDicteeRef = useRef(false);
+  const dernierScanIdRef = useRef<string | undefined>(undefined);
+
+  useEffect(() => {
+    if (!params.scanned || !params.scanId || dernierScanIdRef.current === params.scanId) return;
+
+    try {
+      const produitScanne = JSON.parse(decodeURIComponent(params.scanned)) as Aliment;
+      dernierScanIdRef.current = params.scanId;
+      ignorerResultatsDicteeRef.current = true;
+      couperMicro('abort');
+      setTexte('');
+      texteFinalDicteeRef.current = '';
+      texteIntermediaireDicteeRef.current = '';
+      setAliments([produitScanne]);
+      setEtape('confirmation');
+    } catch (e) {
+      Alert.alert('Erreur scan', String(e));
+    }
+  }, [params.scanned, params.scanId]);
 
   useSpeechRecognitionEvent('result', (event) => {
     if (ignorerResultatsDicteeRef.current) return;

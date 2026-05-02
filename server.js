@@ -211,6 +211,68 @@ function quantiteAbsente(quantite) {
   return quantite === 0 || quantite === '0' || quantite === null || quantite === undefined || quantite === '';
 }
 
+function nombreOpenFoodFacts(valeur) {
+  const nombre = Number(valeur);
+  return Number.isFinite(nombre) ? nombre : 0;
+}
+
+function premiereValeurNumerique(objet, cles) {
+  for (const cle of cles) {
+    const nombre = nombreOpenFoodFacts(objet?.[cle]);
+    if (nombre > 0) return nombre;
+  }
+  return 0;
+}
+
+function extrairePortionProduit(produit) {
+  const textePortion = normaliserNom(produit.serving_size || '');
+  const quantitePortion = nombreOpenFoodFacts(produit.serving_quantity);
+  const unite = textePortion.includes('ml') || textePortion.includes('cl') || textePortion.includes('l') ? 'ml' : 'gramme';
+
+  if (quantitePortion > 0) {
+    if (textePortion.includes('cl') && !textePortion.includes('ml')) return { quantite: quantitePortion * 10, unite: 'ml' };
+    if (textePortion.match(/\b[0-9]+([.,][0-9]+)?\s*l\b/)) return { quantite: quantitePortion * 1000, unite: 'ml' };
+    return { quantite: quantitePortion, unite };
+  }
+
+  const match = textePortion.match(/([0-9]+(?:[.,][0-9]+)?)\s*(ml|cl|l|g)/);
+  if (match) {
+    const valeur = Number(match[1].replace(',', '.'));
+    if (match[2] === 'ml') return { quantite: valeur, unite: 'ml' };
+    if (match[2] === 'cl') return { quantite: valeur * 10, unite: 'ml' };
+    if (match[2] === 'l') return { quantite: valeur * 1000, unite: 'ml' };
+    return { quantite: valeur, unite: 'gramme' };
+  }
+
+  return { quantite: 100, unite: 'gramme' };
+}
+
+function transformerProduitOpenFoodFacts(produit, codeBarres) {
+  const nutriments = produit.nutriments || {};
+  const nomProduit = produit.product_name_fr || produit.product_name || produit.generic_name_fr || produit.generic_name || ('Produit scanne ' + codeBarres);
+  const marque = produit.brands ? String(produit.brands).split(',')[0].trim() : '';
+  const { quantite, unite } = extrairePortionProduit(produit);
+  const facteur = quantite / 100;
+  const calories100g = premiereValeurNumerique(nutriments, ['energy-kcal_100g', 'energy-kcal_value', 'energy-kcal']);
+  const caloriesDepuisKj = calories100g > 0 ? calories100g : nombreOpenFoodFacts(nutriments['energy_100g']) / 4.184;
+
+  return {
+    nom: quantite + ' ' + (unite === 'ml' ? 'ml ' : 'g ') + (marque ? nomProduit + ' - ' + marque : nomProduit),
+    calories: Math.round(caloriesDepuisKj * facteur),
+    proteines: Math.round(nombreOpenFoodFacts(nutriments.proteins_100g) * facteur * 10) / 10,
+    glucides: Math.round(nombreOpenFoodFacts(nutriments.carbohydrates_100g) * facteur * 10) / 10,
+    lipides: Math.round(nombreOpenFoodFacts(nutriments.fat_100g) * facteur * 10) / 10,
+    sucres: Math.round(nombreOpenFoodFacts(nutriments.sugars_100g) * facteur * 10) / 10,
+    fibres: Math.round(nombreOpenFoodFacts(nutriments.fiber_100g) * facteur * 10) / 10,
+    _nom: marque ? nomProduit + ' - ' + marque : nomProduit,
+    _quantite: String(Math.round(quantite * 10) / 10),
+    _unite: unite,
+    code_barres: codeBarres,
+    source: 'Open Food Facts',
+    image: produit.image_front_url || null,
+  };
+}
+
 function motsSignificatifs(texte) {
   return normaliserNom(texte)
     .replace(/[^a-z0-9 ]/g, ' ')
@@ -462,6 +524,33 @@ app.post('/nutrition', async (req, res) => {
       };
     });
     res.json(resultats);
+  } catch (e) {
+    res.status(500).json({ error: String(e) });
+  }
+});
+
+app.get('/barcode/:code', async (req, res) => {
+  const codeBarres = String(req.params.code || '').replace(/[^0-9]/g, '');
+
+  if (!codeBarres) {
+    return res.status(400).json({ error: 'Code-barres invalide' });
+  }
+
+  try {
+    const url = 'https://world.openfoodfacts.org/api/v2/product/' + encodeURIComponent(codeBarres) + '.json?fields=code,status,product_name,product_name_fr,generic_name,generic_name_fr,brands,serving_size,serving_quantity,nutriments,image_front_url';
+    const response = await fetch(url, {
+      headers: {
+        'User-Agent': 'CalorieApp/1.0 (contact: arnaudleonesquevin-hash)',
+      },
+    });
+    const data = await response.json();
+
+    if (!response.ok || data.status !== 1 || !data.product) {
+      return res.status(404).json({ error: 'Produit introuvable' });
+    }
+
+    const produit = transformerProduitOpenFoodFacts(data.product, codeBarres);
+    res.json(produit);
   } catch (e) {
     res.status(500).json({ error: String(e) });
   }
