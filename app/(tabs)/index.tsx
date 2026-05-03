@@ -30,7 +30,31 @@ type AlimentParse = {
   unite: string;
 };
 
+type RepasId = 'petitDejeuner' | 'dejeuner' | 'diner' | 'collation';
+
+type Repas = {
+  id: RepasId;
+  nom: string;
+  aliments: Aliment[];
+};
+
+type Totaux = {
+  calories: number;
+  proteines: number;
+  glucides: number;
+  lipides: number;
+};
+
 const SPEECH_OPTIONS = { lang: 'fr-FR', interimResults: true, continuous: true };
+
+const REPAS_OPTIONS: { id: RepasId; nom: string }[] = [
+  { id: 'petitDejeuner', nom: 'Petit dejeuner' },
+  { id: 'dejeuner', nom: 'Dejeuner' },
+  { id: 'diner', nom: 'Diner' },
+  { id: 'collation', nom: 'Collation' },
+];
+
+const creerRepasJour = (): Repas[] => REPAS_OPTIONS.map((repas) => ({ ...repas, aliments: [] }));
 
 const nettoyerTexte = (valeur: string) => valeur.trim().replace(/\s+/g, ' ');
 
@@ -62,6 +86,13 @@ const formatMacro = (valeur: number) => {
   const arrondi = Math.round((valeur || 0) * 10) / 10;
   return String(arrondi).replace('.', ',');
 };
+
+const calculerTotaux = (aliments: Aliment[]): Totaux => ({
+  calories: aliments.reduce((sum, aliment) => sum + (aliment.calories || 0), 0),
+  proteines: Math.round(aliments.reduce((sum, aliment) => sum + (aliment.proteines || 0), 0) * 10) / 10,
+  glucides: Math.round(aliments.reduce((sum, aliment) => sum + (aliment.glucides || 0), 0) * 10) / 10,
+  lipides: Math.round(aliments.reduce((sum, aliment) => sum + (aliment.lipides || 0), 0) * 10) / 10,
+});
 
 const nombre = (valeur: unknown) => {
   const resultat = Number(String(valeur ?? '').replace(',', '.'));
@@ -114,17 +145,15 @@ const reconstruireNomGlobal = (nom: string, quantite: string, unite: string) => 
 };
 
 export default function HomeScreen() {
-  const params = useLocalSearchParams<{ scanned?: string; scanId?: string }>();
+  const params = useLocalSearchParams<{ scanned?: string; scanId?: string; mealId?: string }>();
   const router = useRouter();
   const [texte, setTexte] = useState('');
-  const [totalCalories, setTotalCalories] = useState(0);
-  const [totalProteines, setTotalProteines] = useState(0);
-  const [totalGlucides, setTotalGlucides] = useState(0);
-  const [totalLipides, setTotalLipides] = useState(0);
   const [chargement, setChargement] = useState(false);
   const [ecoute, setEcoute] = useState(false);
+  const [repasJour, setRepasJour] = useState<Repas[]>(creerRepasJour);
+  const [repasActif, setRepasActif] = useState<RepasId | null>(null);
   const [aliments, setAliments] = useState<Aliment[]>([]);
-  const [etape, setEtape] = useState<'saisie' | 'confirmation'>('saisie');
+  const [etape, setEtape] = useState<'accueil' | 'saisie' | 'confirmation' | 'detailRepas'>('accueil');
   const [nouvelAliment, setNouvelAliment] = useState('');
   const [ajoutEnCours, setAjoutEnCours] = useState(false);
   const [recalcEnCours, setRecalcEnCours] = useState(-1);
@@ -134,12 +163,20 @@ export default function HomeScreen() {
   const ignorerResultatsDicteeRef = useRef(false);
   const dernierScanIdRef = useRef<string | undefined>(undefined);
 
+  const estRepasId = (valeur: string | undefined): valeur is RepasId => {
+    return REPAS_OPTIONS.some((repas) => repas.id === valeur);
+  };
+
+  const nomRepasActif = REPAS_OPTIONS.find((repas) => repas.id === repasActif)?.nom || 'Repas';
+
   useEffect(() => {
     if (!params.scanned || !params.scanId || dernierScanIdRef.current === params.scanId) return;
 
     try {
       const produitScanne = enrichirProduitScanne(JSON.parse(decodeURIComponent(params.scanned)) as Aliment);
+      const repasScan = estRepasId(params.mealId) ? params.mealId : repasActif || 'collation';
       dernierScanIdRef.current = params.scanId;
+      setRepasActif(repasScan);
       ignorerResultatsDicteeRef.current = true;
       couperMicro('abort');
       setTexte('');
@@ -150,7 +187,7 @@ export default function HomeScreen() {
     } catch (e) {
       Alert.alert('Erreur scan', String(e));
     }
-  }, [params.scanned, params.scanId]);
+  }, [params.scanned, params.scanId, params.mealId, repasActif]);
 
   useSpeechRecognitionEvent('result', (event) => {
     if (ignorerResultatsDicteeRef.current) return;
@@ -281,6 +318,11 @@ export default function HomeScreen() {
   };
 
   const analyserRepas = async () => {
+    if (!repasActif) {
+      Alert.alert('Choisis un repas', 'Selectionne petit dejeuner, dejeuner, diner ou collation.');
+      return;
+    }
+
     const texteAAnalyser = nettoyerTexte(texte);
     if (!texteAAnalyser) return;
 
@@ -382,29 +424,63 @@ export default function HomeScreen() {
     setAjoutEnCours(false);
   };
 
-  const scannerAutreProduit = () => {
+  const demarrerAjoutRepas = (id: RepasId) => {
     ignorerResultatsDicteeRef.current = true;
     couperMicro('abort');
-    router.push('/scan');
+    setRepasActif(id);
+    setAliments([]);
+    setTexte('');
+    texteFinalDicteeRef.current = '';
+    texteIntermediaireDicteeRef.current = '';
+    setNouvelAliment('');
+    setEtape('saisie');
   };
 
-  const totalRepasCalories = aliments.reduce((sum, a) => sum + (a.calories || 0), 0);
-  const totalRepasProteines = aliments.reduce((sum, a) => sum + (a.proteines || 0), 0);
-  const totalRepasGlucides = aliments.reduce((sum, a) => sum + (a.glucides || 0), 0);
-  const totalRepasLipides = aliments.reduce((sum, a) => sum + (a.lipides || 0), 0);
+  const ouvrirDetailRepas = (id: RepasId) => {
+    setRepasActif(id);
+    setEtape('detailRepas');
+  };
+
+  const scannerProduitRepas = () => {
+    const mealId = repasActif || 'collation';
+    setRepasActif(mealId);
+    ignorerResultatsDicteeRef.current = true;
+    couperMicro('abort');
+    router.push({ pathname: '/scan', params: { mealId } });
+  };
+
+  const scannerAutreProduit = () => {
+    const mealId = repasActif || 'collation';
+    setRepasActif(mealId);
+    ignorerResultatsDicteeRef.current = true;
+    couperMicro('abort');
+    router.push({ pathname: '/scan', params: { mealId } });
+  };
+
+  const repasSelectionne = repasJour.find((repas) => repas.id === repasActif);
+  const alimentsRepasSelectionne = repasSelectionne?.aliments || [];
+  const totauxJour = calculerTotaux(repasJour.flatMap((repas) => repas.aliments));
+  const totauxConfirmation = calculerTotaux(aliments);
+  const totauxRepasSelectionne = calculerTotaux(alimentsRepasSelectionne);
 
   const confirmer = () => {
-    setTotalCalories(prev => prev + totalRepasCalories);
-    setTotalProteines(prev => Math.round((prev + totalRepasProteines) * 10) / 10);
-    setTotalGlucides(prev => Math.round((prev + totalRepasGlucides) * 10) / 10);
-    setTotalLipides(prev => Math.round((prev + totalRepasLipides) * 10) / 10);
-    setEtape('saisie');
+    if (!repasActif) {
+      Alert.alert('Choisis un repas', 'Impossible d ajouter sans repas selectionne.');
+      return;
+    }
+
+    setRepasJour((jourActuel) => jourActuel.map((repas) => (
+      repas.id === repasActif
+        ? { ...repas, aliments: [...repas.aliments, ...aliments] }
+        : repas
+    )));
+    setEtape('accueil');
     setTexte('');
     texteFinalDicteeRef.current = '';
     texteIntermediaireDicteeRef.current = '';
     ignorerResultatsDicteeRef.current = true;
     setAliments([]);
-    Alert.alert('Ajoute !', 'Total repas: ' + totalRepasCalories + ' kcal');
+    Alert.alert('Ajoute !', nomRepasActif + ': ' + totauxConfirmation.calories + ' kcal');
   };
 
   const recommencer = () => {
@@ -418,21 +494,90 @@ export default function HomeScreen() {
     setNouvelAliment('');
   };
 
+  if (etape === 'saisie') {
+    return (
+      <View style={styles.container}>
+        <Text style={styles.title}>{nomRepasActif}</Text>
+        <Text style={styles.subtitle}>Ajoute des aliments</Text>
+        <TextInput style={styles.input} placeholder="Ex: steak 200g, 2 oeufs..." value={texte} onChangeText={modifierTexte} />
+        <TouchableOpacity style={styles.button} onPress={analyserRepas}>
+          <Text style={styles.buttonText}>{chargement ? 'Analyse...' : 'Analyser'}</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={ecoute ? styles.buttonMicroActif : styles.buttonMicro} onPress={toggleDictee}>
+          <Text style={styles.buttonText}>{ecoute ? 'Appuie pour arreter' : 'Dicter un repas'}</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.buttonScanSpacing} onPress={scannerProduitRepas}>
+          <Text style={styles.buttonText}>Scanner un produit</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.buttonSecondary} onPress={() => setEtape('accueil')}>
+          <Text style={styles.buttonSecondaryText}>Retour</Text>
+        </TouchableOpacity>
+      </View>
+    );
+  }
+
+  if (etape === 'detailRepas') {
+    return (
+      <ScrollView contentContainerStyle={styles.container}>
+        <Text style={styles.title}>{nomRepasActif}</Text>
+        <Text style={styles.caloriesSmall}>{totauxRepasSelectionne.calories}</Text>
+        <Text style={styles.subtitle}>calories</Text>
+        <View style={styles.macroSummary}>
+          <View style={styles.macroItem}>
+            <Text style={styles.macroValue}>{formatMacro(totauxRepasSelectionne.proteines)}g</Text>
+            <Text style={styles.macroLabel}>Proteines</Text>
+          </View>
+          <View style={styles.macroItem}>
+            <Text style={styles.macroValue}>{formatMacro(totauxRepasSelectionne.glucides)}g</Text>
+            <Text style={styles.macroLabel}>Glucides</Text>
+          </View>
+          <View style={styles.macroItem}>
+            <Text style={styles.macroValue}>{formatMacro(totauxRepasSelectionne.lipides)}g</Text>
+            <Text style={styles.macroLabel}>Lipides</Text>
+          </View>
+        </View>
+
+        {alimentsRepasSelectionne.length === 0 ? (
+          <Text style={styles.emptyText}>Aucun aliment pour ce repas.</Text>
+        ) : alimentsRepasSelectionne.map((aliment, index) => {
+          const parsed = parseAliment(aliment);
+          return (
+            <View key={index} style={styles.detailAlimentRow}>
+              <View style={styles.detailAlimentText}>
+                <Text style={styles.detailAlimentNom}>{parsed.nom}</Text>
+                <Text style={styles.detailAlimentMacros}>P {formatMacro(aliment.proteines)}g   G {formatMacro(aliment.glucides)}g   L {formatMacro(aliment.lipides)}g</Text>
+              </View>
+              <Text style={styles.detailAlimentCalories}>{aliment.calories} kcal</Text>
+            </View>
+          );
+        })}
+
+        <TouchableOpacity style={styles.button} onPress={() => repasActif && demarrerAjoutRepas(repasActif)}>
+          <Text style={styles.buttonText}>Ajouter a ce repas</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.buttonSecondary} onPress={() => setEtape('accueil')}>
+          <Text style={styles.buttonSecondaryText}>Retour</Text>
+        </TouchableOpacity>
+      </ScrollView>
+    );
+  }
+
   if (etape === 'confirmation') {
     return (
       <ScrollView contentContainerStyle={styles.container}>
         <Text style={styles.title}>Confirme ton repas</Text>
+        <Text style={styles.mealSubtitle}>{nomRepasActif}</Text>
         <View style={styles.macroSummary}>
           <View style={styles.macroItem}>
-            <Text style={styles.macroValue}>{formatMacro(totalRepasProteines)}g</Text>
+            <Text style={styles.macroValue}>{formatMacro(totauxConfirmation.proteines)}g</Text>
             <Text style={styles.macroLabel}>Proteines</Text>
           </View>
           <View style={styles.macroItem}>
-            <Text style={styles.macroValue}>{formatMacro(totalRepasGlucides)}g</Text>
+            <Text style={styles.macroValue}>{formatMacro(totauxConfirmation.glucides)}g</Text>
             <Text style={styles.macroLabel}>Glucides</Text>
           </View>
           <View style={styles.macroItem}>
-            <Text style={styles.macroValue}>{formatMacro(totalRepasLipides)}g</Text>
+            <Text style={styles.macroValue}>{formatMacro(totauxConfirmation.lipides)}g</Text>
             <Text style={styles.macroLabel}>Lipides</Text>
           </View>
         </View>
@@ -507,40 +652,63 @@ export default function HomeScreen() {
   }
 
   return (
-    <View style={styles.container}>
+    <ScrollView contentContainerStyle={styles.container}>
       <Text style={styles.title}>Mes Calories</Text>
-      <Text style={styles.calories}>{totalCalories}</Text>
+      <Text style={styles.calories}>{totauxJour.calories}</Text>
       <Text style={styles.subtitle}>calories aujourdhui</Text>
       <View style={styles.macroSummary}>
         <View style={styles.macroItem}>
-          <Text style={styles.macroValue}>{formatMacro(totalProteines)}g</Text>
+          <Text style={styles.macroValue}>{formatMacro(totauxJour.proteines)}g</Text>
           <Text style={styles.macroLabel}>Proteines</Text>
         </View>
         <View style={styles.macroItem}>
-          <Text style={styles.macroValue}>{formatMacro(totalGlucides)}g</Text>
+          <Text style={styles.macroValue}>{formatMacro(totauxJour.glucides)}g</Text>
           <Text style={styles.macroLabel}>Glucides</Text>
         </View>
         <View style={styles.macroItem}>
-          <Text style={styles.macroValue}>{formatMacro(totalLipides)}g</Text>
+          <Text style={styles.macroValue}>{formatMacro(totauxJour.lipides)}g</Text>
           <Text style={styles.macroLabel}>Lipides</Text>
         </View>
       </View>
-      <TextInput style={styles.input} placeholder="Ex: steak 200g, 2 oeufs..." value={texte} onChangeText={modifierTexte} />
-      <TouchableOpacity style={styles.button} onPress={analyserRepas}>
-        <Text style={styles.buttonText}>{chargement ? 'Analyse...' : 'Analyser'}</Text>
-      </TouchableOpacity>
-      <TouchableOpacity style={ecoute ? styles.buttonMicroActif : styles.buttonMicro} onPress={toggleDictee}>
-        <Text style={styles.buttonText}>{ecoute ? 'Appuie pour arreter' : 'Dicter un repas'}</Text>
-      </TouchableOpacity>
-    </View>
+
+      <Text style={styles.sectionTitle}>Ajouter un repas</Text>
+      <View style={styles.mealChoiceGrid}>
+        {REPAS_OPTIONS.map((repas) => (
+          <TouchableOpacity key={repas.id} style={styles.mealChoiceButton} onPress={() => demarrerAjoutRepas(repas.id)}>
+            <Text style={styles.mealChoiceText}>{repas.nom}</Text>
+          </TouchableOpacity>
+        ))}
+      </View>
+
+      <Text style={styles.sectionTitle}>Aujourdhui</Text>
+      {repasJour.map((repas) => {
+        const totaux = calculerTotaux(repas.aliments);
+        const nomsAliments = repas.aliments.map((aliment) => parseAliment(aliment).nom).filter(Boolean).join(', ');
+        return (
+          <TouchableOpacity key={repas.id} style={styles.repasCard} onPress={() => ouvrirDetailRepas(repas.id)}>
+            <View style={styles.repasCardHeader}>
+              <Text style={styles.repasTitle}>{repas.nom}</Text>
+              <Text style={styles.repasCalories}>{totaux.calories} kcal</Text>
+            </View>
+            <Text style={styles.repasMacros}>P {formatMacro(totaux.proteines)}g   G {formatMacro(totaux.glucides)}g   L {formatMacro(totaux.lipides)}g</Text>
+            <Text style={repas.aliments.length ? styles.repasFoods : styles.repasFoodsEmpty}>
+              {repas.aliments.length ? nomsAliments : 'Aucun aliment'}
+            </Text>
+          </TouchableOpacity>
+        );
+      })}
+    </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flexGrow: 1, backgroundColor: '#fff', alignItems: 'center', justifyContent: 'center', padding: 20 },
+  container: { flexGrow: 1, backgroundColor: '#fff', alignItems: 'center', justifyContent: 'flex-start', padding: 20, paddingTop: 52 },
   title: { fontSize: 28, fontWeight: 'bold', marginBottom: 20 },
   calories: { fontSize: 80, fontWeight: 'bold', color: '#FF6B6B' },
+  caloriesSmall: { fontSize: 54, fontWeight: 'bold', color: '#FF6B6B' },
   subtitle: { fontSize: 18, color: '#999', marginBottom: 16 },
+  mealSubtitle: { fontSize: 18, color: '#777', marginTop: -12, marginBottom: 14, fontWeight: 'bold' },
+  sectionTitle: { width: '100%', fontSize: 18, fontWeight: 'bold', color: '#333', marginBottom: 10, marginTop: 4 },
   macroSummary: { flexDirection: 'row', width: '100%', backgroundColor: '#f9f9f9', borderRadius: 10, padding: 12, marginBottom: 20 },
   macroItem: { flex: 1, alignItems: 'center' },
   macroValue: { fontSize: 18, fontWeight: 'bold', color: '#FF6B6B' },
@@ -548,9 +716,28 @@ const styles = StyleSheet.create({
   input: { width: '100%', borderWidth: 1, borderColor: '#ddd', borderRadius: 10, padding: 15, fontSize: 16, marginBottom: 15 },
   button: { backgroundColor: '#FF6B6B', paddingHorizontal: 30, paddingVertical: 15, borderRadius: 30, marginBottom: 15, width: '100%', alignItems: 'center' },
   buttonScan: { backgroundColor: '#4ECDC4', paddingHorizontal: 30, paddingVertical: 15, borderRadius: 30, marginBottom: 15, width: '100%', alignItems: 'center' },
+  buttonScanSpacing: { backgroundColor: '#4ECDC4', paddingHorizontal: 30, paddingVertical: 15, borderRadius: 30, marginBottom: 15, marginTop: 15, width: '100%', alignItems: 'center' },
+  buttonSecondary: { backgroundColor: '#f2f2f2', paddingHorizontal: 30, paddingVertical: 15, borderRadius: 30, marginBottom: 15, width: '100%', alignItems: 'center' },
   buttonMicro: { backgroundColor: '#4ECDC4', paddingHorizontal: 30, paddingVertical: 15, borderRadius: 30, width: '100%', alignItems: 'center' },
   buttonMicroActif: { backgroundColor: '#FF0000', paddingHorizontal: 30, paddingVertical: 15, borderRadius: 30, width: '100%', alignItems: 'center' },
   buttonText: { color: '#fff', fontSize: 18, fontWeight: 'bold' },
+  buttonSecondaryText: { color: '#555', fontSize: 18, fontWeight: 'bold' },
+  mealChoiceGrid: { width: '100%', flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', marginBottom: 18 },
+  mealChoiceButton: { width: '48%', backgroundColor: '#4ECDC4', borderRadius: 10, paddingVertical: 14, paddingHorizontal: 8, alignItems: 'center', marginBottom: 10 },
+  mealChoiceText: { color: '#fff', fontSize: 15, fontWeight: 'bold', textAlign: 'center' },
+  repasCard: { width: '100%', backgroundColor: '#f9f9f9', borderRadius: 10, padding: 14, marginBottom: 10 },
+  repasCardHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 },
+  repasTitle: { fontSize: 18, fontWeight: 'bold', color: '#222' },
+  repasCalories: { fontSize: 18, fontWeight: 'bold', color: '#FF6B6B' },
+  repasMacros: { fontSize: 13, color: '#777', marginBottom: 6 },
+  repasFoods: { fontSize: 14, color: '#333' },
+  repasFoodsEmpty: { fontSize: 14, color: '#aaa', fontStyle: 'italic' },
+  emptyText: { width: '100%', color: '#999', textAlign: 'center', fontSize: 16, marginBottom: 20 },
+  detailAlimentRow: { width: '100%', flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#f9f9f9', borderRadius: 10, padding: 12, marginBottom: 8 },
+  detailAlimentText: { flex: 1, marginRight: 10 },
+  detailAlimentNom: { fontSize: 16, fontWeight: 'bold', color: '#222', marginBottom: 4 },
+  detailAlimentMacros: { fontSize: 12, color: '#777' },
+  detailAlimentCalories: { fontSize: 15, fontWeight: 'bold', color: '#FF6B6B' },
   headerRow: { flexDirection: 'row', width: '100%', paddingHorizontal: 5, marginBottom: 5 },
   headerText: { fontSize: 12, color: '#999', fontWeight: 'bold' },
   alimentCard: { width: '100%', marginBottom: 8, backgroundColor: '#f9f9f9', borderRadius: 10, padding: 8 },

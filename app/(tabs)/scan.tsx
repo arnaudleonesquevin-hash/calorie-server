@@ -1,5 +1,5 @@
 import { CameraView, useCameraPermissions, type BarcodeScanningResult } from 'expo-camera';
-import { useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useState } from 'react';
 import { ActivityIndicator, Alert, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
@@ -7,6 +7,7 @@ const API_URL = 'https://calorie-server-production.up.railway.app';
 
 export default function ScanScreen() {
   const router = useRouter();
+  const params = useLocalSearchParams<{ mealId?: string }>();
   const [permission, requestPermission] = useCameraPermissions();
   const [scanEnCours, setScanEnCours] = useState(false);
   const [dernierCode, setDernierCode] = useState('');
@@ -35,6 +36,7 @@ export default function ScanScreen() {
         params: {
           scanned: encodeURIComponent(JSON.stringify(produit)),
           scanId: String(Date.now()),
+          mealId: params.mealId || '',
         },
       });
     } catch (e) {

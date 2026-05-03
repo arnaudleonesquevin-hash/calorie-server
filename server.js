@@ -50,6 +50,7 @@ const ALCOOLS_FORTS = ['rhum', 'vodka', 'whisky', 'cognac', 'armagnac', 'eau de 
 const PAINS = ['pain', 'pain complet', 'pain integral', 'pain int\u00e9gral', 'pain de mie', 'tartine', 'baguette'];
 const PATES_A_TARTINER = ['nutella', 'pate a tartiner', 'p\u00e2te a tartiner', 'pate \u00e0 tartiner', 'p\u00e2te \u00e0 tartiner', 'chocolat noisette'];
 const BEURRES_CACAHUETE = ['beurre de cacahuete', 'beurre de cacahu\u00e8te', 'peanut butter'];
+const FROMAGES_SPECIFIQUES = ['fromage blanc', 'emmental', 'emmenthal', 'camembert', 'parmesan', 'roquefort', 'brie', 'cheddar', 'gouda', 'mozzarella', 'chevre', 'ch\u00e8vre', 'comte', 'comt\u00e9'];
 
 function estOeuf(nom) {
   const n = normaliserNom(nom);
@@ -173,6 +174,15 @@ function estBeurre(nom) {
   const mots = motsSignificatifs(nom);
   if (estBeurreCacahuete(n) || n.includes('haricot beurre') || n.includes('beurre de cacao') || n.includes('beurre de karite')) return false;
   return mots.includes('beurre');
+}
+
+function estFromageGenerique(nom) {
+  const n = normaliserNom(nom);
+  const mots = motsSignificatifs(nom);
+  if (!mots.includes('fromage')) return false;
+  if (n.includes('sauce') || n.includes('pizza') || n.includes('pate') || n.includes('gratin')) return false;
+  if (FROMAGES_SPECIFIQUES.some(v => n.includes(normaliserNom(v)))) return false;
+  return mots.length === 1 || mots.includes('morceau') || mots.includes('portion') || mots.includes('tranche');
 }
 
 function appliquerDefautGrammes(a, grammesParUnite) {
@@ -435,6 +445,13 @@ function appliquerDefauts(a) {
   if (estPain(nom)) {
     a.nom_ciqual = getNomCiqualPain(nom);
     appliquerDefautGrammes(a, 50);
+    return a;
+  }
+
+  // Fromage seul : portion standard de 30g, pas fromage blanc.
+  if (estFromageGenerique(nom)) {
+    a.nom_ciqual = 'emmental ou emmenthal';
+    appliquerDefautGrammes(a, 30);
     return a;
   }
 
