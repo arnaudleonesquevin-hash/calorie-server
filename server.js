@@ -159,6 +159,13 @@ function getNomCiqualPain(nom) {
   return 'pain courant, 400g ou boule';
 }
 
+function getNomAffichagePain(nom) {
+  const n = normaliserNom(nom);
+  if (n.includes('complet') || n.includes('integral')) return 'pain complet';
+  if (n.includes('baguette')) return 'baguette';
+  return 'pain';
+}
+
 function estPateATartiner(nom) {
   const n = normaliserNom(nom);
   return PATES_A_TARTINER.some(v => n.includes(normaliserNom(v)));
@@ -372,6 +379,55 @@ function rechercherCiqual(nomFr) {
   return meilleurScore >= 50 ? meilleur : null;
 }
 
+function decomposerPainTartine(a) {
+  const nomOriginal = a.nom_original || '';
+  const nom = normaliserNom(nomOriginal);
+  const estBasePain = nom.includes('tartine') || nom.includes('pain');
+
+  if (!estBasePain) return [a];
+
+  const resultats = [];
+  const nomPain = nom.includes('complet') || nom.includes('integral') ? 'pain complet' : 'pain';
+  const pain = {
+    nom_ciqual: getNomCiqualPain(nomOriginal),
+    nom_original: nomPain,
+    quantite: 50,
+    unite: 'gramme',
+  };
+
+  if (estPateATartiner(nom)) {
+    resultats.push(pain, {
+      nom_ciqual: 'pate a tartiner chocolat noisette',
+      nom_original: 'Nutella',
+      quantite: 20,
+      unite: 'gramme',
+    });
+    return resultats;
+  }
+
+  if (estBeurreCacahuete(nom)) {
+    resultats.push(pain, {
+      nom_ciqual: 'beurre de cacahuete',
+      nom_original: 'beurre de cacahuete',
+      quantite: 20,
+      unite: 'gramme',
+    });
+    return resultats;
+  }
+
+  if (estBeurre(nom)) {
+    resultats.push(pain, {
+      nom_ciqual: 'beurre doux',
+      nom_original: 'beurre',
+      quantite: 10,
+      unite: 'gramme',
+    });
+    return resultats;
+  }
+
+  return [a];
+}
+
 function appliquerDefauts(a) {
   if (a.nom_original) {
     a.nom_original = String(a.nom_original)
@@ -444,6 +500,7 @@ function appliquerDefauts(a) {
 
   if (estPain(nom)) {
     a.nom_ciqual = getNomCiqualPain(nom);
+    a.nom_original = getNomAffichagePain(nom);
     appliquerDefautGrammes(a, 50);
     return a;
   }
@@ -542,7 +599,7 @@ app.post('/nutrition', async (req, res) => {
     });
     const claudeData = await claudeResponse.json();
     const texte = claudeData.content[0].text.trim().replace(/```json/g, '').replace(/```/g, '').trim();
-    const alimentsExtraits = JSON.parse(texte);
+    const alimentsExtraits = JSON.parse(texte).flatMap(decomposerPainTartine);
 
     const resultats = alimentsExtraits.map((a) => {
       a = appliquerDefauts(a);

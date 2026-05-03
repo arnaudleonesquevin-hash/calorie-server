@@ -411,6 +411,95 @@ export default function HomeScreen() {
     setAliments(aliments.filter((_, i) => i !== index));
   };
 
+  const modifierAlimentRepasActif = (index: number, modifier: (aliment: Aliment) => Aliment) => {
+    if (!repasActif) return;
+
+    setRepasJour((jourActuel) => jourActuel.map((repas) => {
+      if (repas.id !== repasActif) return repas;
+
+      const nouveauxAliments = [...repas.aliments];
+      if (!nouveauxAliments[index]) return repas;
+      nouveauxAliments[index] = modifier(nouveauxAliments[index]);
+
+      return { ...repas, aliments: nouveauxAliments };
+    }));
+  };
+
+  const modifierNomAlimentRepas = (index: number, valeur: string) => {
+    modifierAlimentRepasActif(index, (aliment) => {
+      const parsed = parseAliment(aliment);
+      return {
+        ...aliment,
+        nom: reconstruireNom(valeur, parsed.quantite, parsed.unite),
+        _nom: valeur,
+        _quantite: parsed.quantite,
+        _unite: parsed.unite,
+      };
+    });
+  };
+
+  const modifierQuantiteAlimentRepas = (index: number, valeur: string) => {
+    modifierAlimentRepasActif(index, (aliment) => {
+      const parsed = parseAliment(aliment);
+      return {
+        ...aliment,
+        nom: reconstruireNom(parsed.nom, valeur, parsed.unite),
+        _nom: parsed.nom,
+        _quantite: valeur,
+        _unite: parsed.unite,
+      };
+    });
+  };
+
+  const recalculerAlimentRepas = async (index: number) => {
+    const repas = repasJour.find((item) => item.id === repasActif);
+    const aliment = repas?.aliments[index];
+    if (!aliment) return;
+
+    const parsed = parseAliment(aliment);
+    const nomComplet = preparerTexteApi(parsed);
+    if (!nomComplet) return;
+
+    setRecalcEnCours(index);
+    try {
+      let alimentRecalcule: Aliment;
+
+      if (estProduitScanne(aliment)) {
+        alimentRecalcule = recalculerProduitScanne(enrichirProduitScanne(aliment), parsed);
+      } else {
+        const info = await calculerCalories(nomComplet);
+        alimentRecalcule = {
+          ...aliment,
+          nom: reconstruireNom(parsed.nom, parsed.quantite, parsed.unite),
+          _nom: parsed.nom,
+          _quantite: parsed.quantite,
+          _unite: parsed.unite,
+          calories: info.calories,
+          proteines: info.proteines,
+          glucides: info.glucides,
+          lipides: info.lipides,
+          sucres: info.sucres,
+          fibres: info.fibres,
+        };
+      }
+
+      modifierAlimentRepasActif(index, () => alimentRecalcule);
+    } catch (e) {
+      Alert.alert('Erreur', String(e));
+    }
+    setRecalcEnCours(-1);
+  };
+
+  const supprimerAlimentRepas = (index: number) => {
+    if (!repasActif) return;
+
+    setRepasJour((jourActuel) => jourActuel.map((repas) => (
+      repas.id === repasActif
+        ? { ...repas, aliments: repas.aliments.filter((_, i) => i !== index) }
+        : repas
+    )));
+  };
+
   const ajouterNouvelAliment = async () => {
     if (!nouvelAliment) return;
     setAjoutEnCours(true);
@@ -539,18 +628,51 @@ export default function HomeScreen() {
 
         {alimentsRepasSelectionne.length === 0 ? (
           <Text style={styles.emptyText}>Aucun aliment pour ce repas.</Text>
-        ) : alimentsRepasSelectionne.map((aliment, index) => {
-          const parsed = parseAliment(aliment);
-          return (
-            <View key={index} style={styles.detailAlimentRow}>
-              <View style={styles.detailAlimentText}>
-                <Text style={styles.detailAlimentNom}>{parsed.nom}</Text>
-                <Text style={styles.detailAlimentMacros}>P {formatMacro(aliment.proteines)}g   G {formatMacro(aliment.glucides)}g   L {formatMacro(aliment.lipides)}g</Text>
-              </View>
-              <Text style={styles.detailAlimentCalories}>{aliment.calories} kcal</Text>
+        ) : (
+          <>
+            <View style={styles.headerRow}>
+              <Text style={[styles.headerText, { flex: 2 }]}>Aliment</Text>
+              <Text style={[styles.headerText, { flex: 1, textAlign: 'center' }]}>Quantite</Text>
+              <Text style={[styles.headerText, { flex: 1, textAlign: 'right' }]}>Calories</Text>
+              <View style={{ width: 80 }} />
             </View>
-          );
-        })}
+
+            {alimentsRepasSelectionne.map((aliment, index) => {
+              const parsed = parseAliment(aliment);
+              return (
+                <View key={index} style={styles.alimentCard}>
+                  <View style={styles.alimentRow}>
+                    <TextInput
+                      style={styles.colNom}
+                      value={parsed.nom}
+                      onChangeText={(v) => modifierNomAlimentRepas(index, v)}
+                    />
+                    <TextInput
+                      style={styles.colQuantite}
+                      value={formatQuantite(parsed.quantite, parsed.unite)}
+                      onChangeText={(v) => modifierQuantiteAlimentRepas(index, v.replace(/[^0-9]/g, ''))}
+                      keyboardType="numeric"
+                    />
+                    <Text style={styles.colCal}>{aliment.calories} kcal</Text>
+                    <View style={styles.alimentBtns}>
+                      <TouchableOpacity onPress={() => recalculerAlimentRepas(index)} style={styles.btnRecalc}>
+                        <Text style={styles.btnRecalcText}>{recalcEnCours === index ? '...' : 'OK'}</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity onPress={() => supprimerAlimentRepas(index)} style={styles.btnSupprimer}>
+                        <Text style={styles.btnSupprimerText}>X</Text>
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                  <View style={styles.macroLine}>
+                    <Text style={styles.macroLineText}>P {formatMacro(aliment.proteines)}g</Text>
+                    <Text style={styles.macroLineText}>G {formatMacro(aliment.glucides)}g</Text>
+                    <Text style={styles.macroLineText}>L {formatMacro(aliment.lipides)}g</Text>
+                  </View>
+                </View>
+              );
+            })}
+          </>
+        )}
 
         <TouchableOpacity style={styles.button} onPress={() => repasActif && demarrerAjoutRepas(repasActif)}>
           <Text style={styles.buttonText}>Ajouter a ce repas</Text>
