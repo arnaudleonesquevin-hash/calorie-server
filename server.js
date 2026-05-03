@@ -289,18 +289,29 @@ function transformerProduitOpenFoodFacts(produit, codeBarres) {
   const facteur = quantite / 100;
   const calories100g = premiereValeurNumerique(nutriments, ['energy-kcal_100g', 'energy-kcal_value', 'energy-kcal']);
   const caloriesDepuisKj = calories100g > 0 ? calories100g : nombreOpenFoodFacts(nutriments['energy_100g']) / 4.184;
+  const proteines100 = nombreOpenFoodFacts(nutriments.proteins_100g);
+  const glucides100 = nombreOpenFoodFacts(nutriments.carbohydrates_100g);
+  const lipides100 = nombreOpenFoodFacts(nutriments.fat_100g);
+  const sucres100 = nombreOpenFoodFacts(nutriments.sugars_100g);
+  const fibres100 = nombreOpenFoodFacts(nutriments.fiber_100g);
 
   return {
     nom: quantite + ' ' + (unite === 'ml' ? 'ml ' : 'g ') + (marque ? nomProduit + ' - ' + marque : nomProduit),
     calories: Math.round(caloriesDepuisKj * facteur),
-    proteines: Math.round(nombreOpenFoodFacts(nutriments.proteins_100g) * facteur * 10) / 10,
-    glucides: Math.round(nombreOpenFoodFacts(nutriments.carbohydrates_100g) * facteur * 10) / 10,
-    lipides: Math.round(nombreOpenFoodFacts(nutriments.fat_100g) * facteur * 10) / 10,
-    sucres: Math.round(nombreOpenFoodFacts(nutriments.sugars_100g) * facteur * 10) / 10,
-    fibres: Math.round(nombreOpenFoodFacts(nutriments.fiber_100g) * facteur * 10) / 10,
+    proteines: Math.round(proteines100 * facteur * 10) / 10,
+    glucides: Math.round(glucides100 * facteur * 10) / 10,
+    lipides: Math.round(lipides100 * facteur * 10) / 10,
+    sucres: Math.round(sucres100 * facteur * 10) / 10,
+    fibres: Math.round(fibres100 * facteur * 10) / 10,
     _nom: marque ? nomProduit + ' - ' + marque : nomProduit,
     _quantite: String(Math.round(quantite * 10) / 10),
     _unite: unite,
+    _calories100: Math.round(caloriesDepuisKj * 10) / 10,
+    _proteines100: proteines100,
+    _glucides100: glucides100,
+    _lipides100: lipides100,
+    _sucres100: sucres100,
+    _fibres100: fibres100,
     code_barres: codeBarres,
     source: 'Open Food Facts',
     image: produit.image_front_url || null,

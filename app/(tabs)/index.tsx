@@ -14,6 +14,14 @@ type Aliment = {
   _nom?: string;
   _quantite?: string;
   _unite?: string;
+  _calories100?: number;
+  _proteines100?: number;
+  _glucides100?: number;
+  _lipides100?: number;
+  _sucres100?: number;
+  _fibres100?: number;
+  code_barres?: string;
+  source?: string;
 };
 
 type AlimentParse = {
@@ -55,6 +63,56 @@ const formatMacro = (valeur: number) => {
   return String(arrondi).replace('.', ',');
 };
 
+const nombre = (valeur: unknown) => {
+  const resultat = Number(String(valeur ?? '').replace(',', '.'));
+  return Number.isFinite(resultat) ? resultat : 0;
+};
+
+const estProduitScanne = (aliment: Aliment) => Boolean(aliment.code_barres || aliment.source === 'Open Food Facts');
+
+const enrichirProduitScanne = (aliment: Aliment): Aliment => {
+  if (!estProduitScanne(aliment)) return aliment;
+
+  const quantite = nombre(aliment._quantite);
+  const facteur = quantite > 0 ? quantite / 100 : 1;
+
+  return {
+    ...aliment,
+    _calories100: aliment._calories100 ?? (facteur ? aliment.calories / facteur : aliment.calories),
+    _proteines100: aliment._proteines100 ?? (facteur ? aliment.proteines / facteur : aliment.proteines),
+    _glucides100: aliment._glucides100 ?? (facteur ? aliment.glucides / facteur : aliment.glucides),
+    _lipides100: aliment._lipides100 ?? (facteur ? aliment.lipides / facteur : aliment.lipides),
+    _sucres100: aliment._sucres100 ?? (facteur ? aliment.sucres / facteur : aliment.sucres),
+    _fibres100: aliment._fibres100 ?? (facteur ? aliment.fibres / facteur : aliment.fibres),
+  };
+};
+
+const recalculerProduitScanne = (aliment: Aliment, parsed: AlimentParse): Aliment => {
+  const quantite = nombre(parsed.quantite);
+  const facteur = quantite / 100;
+
+  return {
+    ...aliment,
+    nom: reconstruireNomGlobal(parsed.nom, parsed.quantite, parsed.unite),
+    _nom: parsed.nom,
+    _quantite: parsed.quantite,
+    _unite: parsed.unite,
+    calories: Math.round((aliment._calories100 || 0) * facteur),
+    proteines: Math.round((aliment._proteines100 || 0) * facteur * 10) / 10,
+    glucides: Math.round((aliment._glucides100 || 0) * facteur * 10) / 10,
+    lipides: Math.round((aliment._lipides100 || 0) * facteur * 10) / 10,
+    sucres: Math.round((aliment._sucres100 || 0) * facteur * 10) / 10,
+    fibres: Math.round((aliment._fibres100 || 0) * facteur * 10) / 10,
+  };
+};
+
+const reconstruireNomGlobal = (nom: string, quantite: string, unite: string) => {
+  if (!quantite) return nom;
+  if (unite === 'piece') return quantite + ' x ' + nom;
+  if (unite === 'ml') return quantite + ' ml ' + nom;
+  return quantite + ' g ' + nom;
+};
+
 export default function HomeScreen() {
   const params = useLocalSearchParams<{ scanned?: string; scanId?: string }>();
   const router = useRouter();
@@ -80,7 +138,7 @@ export default function HomeScreen() {
     if (!params.scanned || !params.scanId || dernierScanIdRef.current === params.scanId) return;
 
     try {
-      const produitScanne = JSON.parse(decodeURIComponent(params.scanned)) as Aliment;
+      const produitScanne = enrichirProduitScanne(JSON.parse(decodeURIComponent(params.scanned)) as Aliment);
       dernierScanIdRef.current = params.scanId;
       ignorerResultatsDicteeRef.current = true;
       couperMicro('abort');
@@ -201,10 +259,7 @@ export default function HomeScreen() {
   };
 
   const reconstruireNom = (nom: string, quantite: string, unite: string) => {
-    if (!quantite) return nom;
-    if (unite === 'piece') return quantite + ' x ' + nom;
-    if (unite === 'ml') return quantite + ' ml ' + nom;
-    return quantite + ' g ' + nom;
+    return reconstruireNomGlobal(nom, quantite, unite);
   };
 
   const preparerTexteApi = (parsed: AlimentParse) => {
@@ -280,6 +335,14 @@ export default function HomeScreen() {
     if (!nomComplet) return;
     setRecalcEnCours(index);
     try {
+      if (estProduitScanne(a)) {
+        const nouveaux = [...aliments];
+        nouveaux[index] = recalculerProduitScanne(enrichirProduitScanne(a), parsed);
+        setAliments(nouveaux);
+        setRecalcEnCours(-1);
+        return;
+      }
+
       const info = await calculerCalories(nomComplet);
       const nouveaux = [...aliments];
       nouveaux[index] = {

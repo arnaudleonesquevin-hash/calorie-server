@@ -65,7 +65,7 @@ export default function ScanScreen() {
   }
 
   return (
-    <View style={styles.container}>
+    <View style={styles.scannerContainer}>
       <CameraView
         style={styles.camera}
         facing="back"
@@ -73,33 +73,33 @@ export default function ScanScreen() {
         barcodeScannerSettings={{
           barcodeTypes: ['ean13', 'ean8', 'upc_a', 'upc_e'],
         }}
-      >
-        <View style={styles.overlay}>
-          <Text style={styles.titleScan}>Scanner un produit</Text>
-          <View style={styles.scanFrame} />
-          <Text style={styles.message}>{message}</Text>
-          {dernierCode ? <Text style={styles.code}>Code : {dernierCode}</Text> : null}
-          {scanEnCours ? <ActivityIndicator color="#fff" size="large" style={styles.loader} /> : null}
-          <TouchableOpacity
-            style={styles.retryButton}
-            onPress={() => {
-              setDernierCode('');
-              setMessage('Place le code-barres dans le cadre');
-              setScanEnCours(false);
-            }}
-          >
-            <Text style={styles.retryText}>Relancer le scan</Text>
-          </TouchableOpacity>
-        </View>
-      </CameraView>
+      />
+      <View style={styles.overlay}>
+        <Text style={styles.titleScan}>Scanner un produit</Text>
+        <View style={styles.scanFrame} />
+        <Text style={styles.message}>{message}</Text>
+        {dernierCode ? <Text style={styles.code}>Code : {dernierCode}</Text> : null}
+        {scanEnCours ? <ActivityIndicator color="#fff" size="large" style={styles.loader} /> : null}
+        <TouchableOpacity
+          style={styles.retryButton}
+          onPress={() => {
+            setDernierCode('');
+            setMessage('Place le code-barres dans le cadre');
+            setScanEnCours(false);
+          }}
+        >
+          <Text style={styles.retryText}>Relancer le scan</Text>
+        </TouchableOpacity>
+      </View>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#000', alignItems: 'center', justifyContent: 'center', padding: 20 },
-  camera: { flex: 1, width: '100%' },
-  overlay: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24, backgroundColor: 'rgba(0,0,0,0.18)' },
+  scannerContainer: { flex: 1, backgroundColor: '#000' },
+  camera: { ...StyleSheet.absoluteFillObject },
+  overlay: { ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'center', padding: 24, backgroundColor: 'rgba(0,0,0,0.18)' },
   title: { fontSize: 28, fontWeight: 'bold', color: '#111', marginBottom: 16, textAlign: 'center' },
   titleScan: { fontSize: 30, fontWeight: 'bold', color: '#fff', marginBottom: 40, textAlign: 'center' },
   text: { color: '#333', fontSize: 17, textAlign: 'center', marginBottom: 20 },
