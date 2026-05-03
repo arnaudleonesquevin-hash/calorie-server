@@ -44,6 +44,25 @@ const SAUCES_PETITES = ['pesto', 'ketchup', 'moutarde', 'barbecue', 'sauce soja'
 const SAUCES_STANDARD = ['carbonara', 'bolognaise', 'tomate', 'bechamel', 'b\u00e9chamel', 'fromage', 'fromages', 'roquefort', 'poivre', 'curry', 'basquaise', 'poivrons'];
 const FRITES = ['frite', 'frites'];
 const CHIPS = ['chips', 'chip'];
+const APERO_POIGNEES = [
+  { termes: ['cacahuete', 'arachide'], nomCiqual: 'cacahuetes grillees salees (estimation)', nomOriginal: 'cacahuetes' },
+  { termes: ['noix de cajou', 'cajou'], nomCiqual: 'noix de cajou, grill\u00e9e, non sal\u00e9e', nomOriginal: 'noix de cajou' },
+  { termes: ['amande'], nomCiqual: 'amandes grillees (estimation)', nomOriginal: 'amandes' },
+  { termes: ['pistache'], nomCiqual: 'pistaches grillees (estimation)', nomOriginal: 'pistaches' },
+  { termes: ['noisette'], nomCiqual: 'noisettes grillees (estimation)', nomOriginal: 'noisettes' },
+  { termes: ['noix de pecan', 'noix de p\u00e9can', 'macadamia', 'noix du bresil', 'noix du br\u00e9sil', 'noix'], nomCiqual: 'noix seches (estimation)', nomOriginal: 'noix' },
+  { termes: ['raisin sec'], nomCiqual: 'raisins secs (estimation)', nomOriginal: 'raisins secs' },
+  { termes: ['abricot sec'], nomCiqual: 'abricots secs (estimation)', nomOriginal: 'abricots secs' },
+  { termes: ['datte'], nomCiqual: 'dattes seches (estimation)', nomOriginal: 'dattes' },
+  { termes: ['figue seche', 'figue s\u00e8che'], nomCiqual: 'figues seches (estimation)', nomOriginal: 'figues seches' },
+  { termes: ['fruit sec', 'fruits secs'], nomCiqual: 'fruits secs melanges (estimation)', nomOriginal: 'fruits secs' },
+  { termes: ['fruit confit', 'fruits confits'], nomCiqual: 'fruit confit', nomOriginal: 'fruits confits' },
+  { termes: ['olive'], nomCiqual: 'olive (aliment moyen)', nomOriginal: 'olives' },
+  { termes: ['bretzel', 'stick'], nomCiqual: 'biscuit ap\u00e9ritif, mini bretzel ou sticks', nomOriginal: 'bretzels' },
+  { termes: ['cracker'], nomCiqual: 'biscuit ap\u00e9ritif, crackers, nature', nomOriginal: 'crackers' },
+  { termes: ['biscuit aperitif', 'biscuit ap\u00e9ritif', 'gateau aperitif', 'g\u00e2teau ap\u00e9ritif'], nomCiqual: 'biscuit ap\u00e9ritif (aliment moyen)', nomOriginal: 'biscuits aperitif' },
+  { termes: ['melange aperitif', 'm\u00e9lange ap\u00e9ritif', 'melange apero', 'm\u00e9lange ap\u00e9ro', 'graines aperitif'], nomCiqual: 'm\u00e9lange ap\u00e9ritif de graines sal\u00e9es et raisins secs', nomOriginal: 'melange aperitif' },
+];
 const DESSERTS_PORTION = ['tiramisu', 'dessert', 'gateau', 'g\u00e2teau', 'mousse', 'creme dessert', 'cr\u00e8me dessert', 'profiterole', 'baba au rhum'];
 const SODAS = ['cola', 'coca', 'coca-cola', 'soda', 'limonade'];
 const BIERES = ['biere', 'bi\u00e8re', 'beer', 'cerveza', 'panache', 'panach\u00e9'];
@@ -130,6 +149,21 @@ function estFrites(nom) {
 function estChips(nom) {
   const mots = motsSignificatifs(nom);
   return CHIPS.some(v => mots.includes(normaliserNom(v)));
+}
+
+function termePresent(nomNormalise, mots, terme) {
+  const motsTerme = motsSignificatifs(terme);
+  if (motsTerme.length > 1) return motsTerme.every(mot => mots.includes(mot));
+  return mots.includes(motsTerme[0]) || nomNormalise.includes(normaliserNom(terme));
+}
+
+function getRegleAperoPoignee(nom) {
+  const n = normaliserNom(nom);
+  const mots = motsSignificatifs(nom);
+  const exclusions = ['beurre de cacahuete', 'beurre de cacahu\u00e8te', 'pate d amande', 'p\u00e2te d amande', 'pate a tartiner', 'p\u00e2te a tartiner', 'huile', 'boisson', 'lait', 'saint jacques', 'muscade', 'coco'];
+  if (exclusions.some(exclusion => n.includes(normaliserNom(exclusion)))) return null;
+
+  return APERO_POIGNEES.find(regle => regle.termes.some(terme => termePresent(n, mots, terme))) || null;
 }
 
 function estDessertPortion(nom) {
@@ -506,6 +540,14 @@ function appliquerDefauts(a) {
 
   if (estChips(nom)) {
     a.nom_ciqual = 'chips de pommes de terre nature ou aromatis\u00e9es, standard';
+    appliquerDefautGrammes(a, 30);
+    return a;
+  }
+
+  const regleAperoPoignee = getRegleAperoPoignee(nom);
+  if (regleAperoPoignee) {
+    a.nom_ciqual = regleAperoPoignee.nomCiqual;
+    a.nom_original = regleAperoPoignee.nomOriginal;
     appliquerDefautGrammes(a, 30);
     return a;
   }

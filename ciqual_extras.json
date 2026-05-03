@@ -48,5 +48,15 @@
   {"nom": "sauce bolognaise, faite maison (estimation)", "calories": 110.0, "proteines": 6.0, "glucides": 6.0, "lipides": 6.0, "sucres": 4.0, "fibres": 1.5},
   {"nom": "beurre doux", "calories": 753.0, "proteines": 0.7, "glucides": 0.9, "lipides": 82.9, "sucres": 0.9, "fibres": 0.0},
   {"nom": "beurre de cacahuete", "calories": 588.0, "proteines": 25.0, "glucides": 20.0, "lipides": 50.0, "sucres": 9.0, "fibres": 6.0},
-  {"nom": "pate a tartiner chocolat noisette", "calories": 539.0, "proteines": 6.3, "glucides": 57.5, "lipides": 30.9, "sucres": 56.3, "fibres": 3.4}
+  {"nom": "pate a tartiner chocolat noisette", "calories": 539.0, "proteines": 6.3, "glucides": 57.5, "lipides": 30.9, "sucres": 56.3, "fibres": 3.4},
+  {"nom": "cacahuetes grillees salees (estimation)", "calories": 585.0, "proteines": 25.8, "glucides": 16.1, "lipides": 49.2, "sucres": 4.7, "fibres": 8.5},
+  {"nom": "amandes grillees (estimation)", "calories": 579.0, "proteines": 21.2, "glucides": 21.6, "lipides": 49.9, "sucres": 4.4, "fibres": 12.5},
+  {"nom": "pistaches grillees (estimation)", "calories": 562.0, "proteines": 20.2, "glucides": 27.2, "lipides": 45.3, "sucres": 7.7, "fibres": 10.3},
+  {"nom": "noisettes grillees (estimation)", "calories": 628.0, "proteines": 15.0, "glucides": 16.7, "lipides": 60.8, "sucres": 4.3, "fibres": 9.7},
+  {"nom": "noix seches (estimation)", "calories": 654.0, "proteines": 15.2, "glucides": 13.7, "lipides": 65.2, "sucres": 2.6, "fibres": 6.7},
+  {"nom": "raisins secs (estimation)", "calories": 299.0, "proteines": 3.1, "glucides": 79.2, "lipides": 0.5, "sucres": 59.2, "fibres": 3.7},
+  {"nom": "abricots secs (estimation)", "calories": 241.0, "proteines": 3.4, "glucides": 62.6, "lipides": 0.5, "sucres": 53.4, "fibres": 7.3},
+  {"nom": "dattes seches (estimation)", "calories": 282.0, "proteines": 2.5, "glucides": 75.0, "lipides": 0.4, "sucres": 63.4, "fibres": 8.0},
+  {"nom": "figues seches (estimation)", "calories": 249.0, "proteines": 3.3, "glucides": 63.9, "lipides": 0.9, "sucres": 47.9, "fibres": 9.8},
+  {"nom": "fruits secs melanges (estimation)", "calories": 420.0, "proteines": 8.0, "glucides": 50.0, "lipides": 20.0, "sucres": 35.0, "fibres": 7.0}
 ]
