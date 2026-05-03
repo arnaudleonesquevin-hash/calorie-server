@@ -224,10 +224,44 @@ function premiereValeurNumerique(objet, cles) {
   return 0;
 }
 
+function estProduitLiquideOpenFoodFacts(produit) {
+  const texte = normaliserNom([
+    produit.product_name_fr,
+    produit.product_name,
+    produit.generic_name_fr,
+    produit.generic_name,
+    produit.brands,
+    produit.categories,
+    Array.isArray(produit.categories_tags) ? produit.categories_tags.join(' ') : produit.categories_tags,
+    produit.quantity,
+    produit.product_quantity_unit,
+    produit.serving_quantity_unit,
+    produit.serving_size,
+  ].filter(Boolean).join(' '));
+
+  const motsLiquides = [
+    'boisson', 'drink', 'beverage',
+    'eau', 'water',
+    'jus', 'juice',
+    'soda', 'cola', 'coca', 'limonade', 'limonada',
+    'biere', 'beer', 'cerveza', 'maestra', 'lager', 'ale', 'stout',
+    'vin', 'wine', 'cidre', 'cider',
+    'lait', 'milk',
+    'the', 'tea', 'cafe', 'coffee',
+  ];
+
+  const mots = motsSignificatifs(texte);
+  return motsLiquides.some((mot) => {
+    if (mot.length <= 4) return mots.includes(mot);
+    return texte.includes(mot);
+  });
+}
+
 function extrairePortionProduit(produit) {
-  const textePortion = normaliserNom(produit.serving_size || '');
+  const textePortion = normaliserNom([produit.serving_size, produit.serving_quantity_unit].filter(Boolean).join(' '));
   const quantitePortion = nombreOpenFoodFacts(produit.serving_quantity);
-  const unite = textePortion.includes('ml') || textePortion.includes('cl') || textePortion.includes('l') ? 'ml' : 'gramme';
+  const estLiquide = estProduitLiquideOpenFoodFacts(produit);
+  const unite = textePortion.includes('ml') || textePortion.includes('cl') || textePortion.match(/\b[0-9]+([.,][0-9]+)?\s*l\b/) || (estLiquide && !textePortion.includes('g')) ? 'ml' : 'gramme';
 
   if (quantitePortion > 0) {
     if (textePortion.includes('cl') && !textePortion.includes('ml')) return { quantite: quantitePortion * 10, unite: 'ml' };
@@ -244,7 +278,7 @@ function extrairePortionProduit(produit) {
     return { quantite: valeur, unite: 'gramme' };
   }
 
-  return { quantite: 100, unite: 'gramme' };
+  return { quantite: 100, unite: estLiquide ? 'ml' : 'gramme' };
 }
 
 function transformerProduitOpenFoodFacts(produit, codeBarres) {
@@ -537,7 +571,7 @@ app.get('/barcode/:code', async (req, res) => {
   }
 
   try {
-    const url = 'https://world.openfoodfacts.org/api/v2/product/' + encodeURIComponent(codeBarres) + '.json?fields=code,status,product_name,product_name_fr,generic_name,generic_name_fr,brands,serving_size,serving_quantity,nutriments,image_front_url';
+    const url = 'https://world.openfoodfacts.org/api/v2/product/' + encodeURIComponent(codeBarres) + '.json?fields=code,status,product_name,product_name_fr,generic_name,generic_name_fr,brands,categories,categories_tags,quantity,product_quantity,product_quantity_unit,serving_size,serving_quantity,serving_quantity_unit,nutriments,image_front_url';
     const response = await fetch(url, {
       headers: {
         'User-Agent': 'CalorieApp/1.0 (contact: arnaudleonesquevin-hash)',

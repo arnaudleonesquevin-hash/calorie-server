@@ -1,6 +1,6 @@
 import { View, Text, StyleSheet, TouchableOpacity, TextInput, Alert, ScrollView } from 'react-native';
 import { useEffect, useRef, useState } from 'react';
-import { useLocalSearchParams } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSpeechRecognitionEvent, ExpoSpeechRecognitionModule } from 'expo-speech-recognition';
 
 type Aliment = {
@@ -57,6 +57,7 @@ const formatMacro = (valeur: number) => {
 
 export default function HomeScreen() {
   const params = useLocalSearchParams<{ scanned?: string; scanId?: string }>();
+  const router = useRouter();
   const [texte, setTexte] = useState('');
   const [totalCalories, setTotalCalories] = useState(0);
   const [totalProteines, setTotalProteines] = useState(0);
@@ -86,7 +87,7 @@ export default function HomeScreen() {
       setTexte('');
       texteFinalDicteeRef.current = '';
       texteIntermediaireDicteeRef.current = '';
-      setAliments([produitScanne]);
+      setAliments((alimentsActuels) => [...alimentsActuels, produitScanne]);
       setEtape('confirmation');
     } catch (e) {
       Alert.alert('Erreur scan', String(e));
@@ -318,6 +319,12 @@ export default function HomeScreen() {
     setAjoutEnCours(false);
   };
 
+  const scannerAutreProduit = () => {
+    ignorerResultatsDicteeRef.current = true;
+    couperMicro('abort');
+    router.push('/scan');
+  };
+
   const totalRepasCalories = aliments.reduce((sum, a) => sum + (a.calories || 0), 0);
   const totalRepasProteines = aliments.reduce((sum, a) => sum + (a.proteines || 0), 0);
   const totalRepasGlucides = aliments.reduce((sum, a) => sum + (a.glucides || 0), 0);
@@ -422,6 +429,10 @@ export default function HomeScreen() {
           </TouchableOpacity>
         </View>
 
+        <TouchableOpacity style={styles.buttonScan} onPress={scannerAutreProduit}>
+          <Text style={styles.buttonText}>Scanner un autre produit</Text>
+        </TouchableOpacity>
+
         <TouchableOpacity style={styles.button} onPress={confirmer}>
           <Text style={styles.buttonText}>Confirmer</Text>
         </TouchableOpacity>
@@ -473,6 +484,7 @@ const styles = StyleSheet.create({
   macroLabel: { fontSize: 12, color: '#999', marginTop: 2 },
   input: { width: '100%', borderWidth: 1, borderColor: '#ddd', borderRadius: 10, padding: 15, fontSize: 16, marginBottom: 15 },
   button: { backgroundColor: '#FF6B6B', paddingHorizontal: 30, paddingVertical: 15, borderRadius: 30, marginBottom: 15, width: '100%', alignItems: 'center' },
+  buttonScan: { backgroundColor: '#4ECDC4', paddingHorizontal: 30, paddingVertical: 15, borderRadius: 30, marginBottom: 15, width: '100%', alignItems: 'center' },
   buttonMicro: { backgroundColor: '#4ECDC4', paddingHorizontal: 30, paddingVertical: 15, borderRadius: 30, width: '100%', alignItems: 'center' },
   buttonMicroActif: { backgroundColor: '#FF0000', paddingHorizontal: 30, paddingVertical: 15, borderRadius: 30, width: '100%', alignItems: 'center' },
   buttonText: { color: '#fff', fontSize: 18, fontWeight: 'bold' },

@@ -1,9 +1,9 @@
 # Suivi de Projet - Application Calories & Macros
 
 ## Derniere mise a jour
-- Date : 30 avril 2026
-- Session : 9
-- Etat : backend Railway deploye via GitHub, app Android en development build
+- Date : 2-3 mai 2026
+- Session : 10
+- Etat : backend Railway deploye, app Android mise a jour avec scanner, APK GitHub installee/en test
 
 ---
 
@@ -24,7 +24,7 @@ Application mobile de suivi nutritionnel :
 - Dictee vocale pour saisir un repas.
 - Journal alimentaire jour par jour.
 - Historique des repas.
-- Scan QR code / code-barres a venir avec Open Food Facts.
+- Scan code-barres avec Open Food Facts, ajoute et a tester sur produits reels.
 
 ---
 
@@ -42,6 +42,7 @@ Application mobile de suivi nutritionnel :
 - Base nutritionnelle principale : Ciqual 2020.
 - Base courte envoyee a Claude : aliments courants + extras.
 - Fichier extras : `ciqual_extras.json`.
+- Scan produit : `expo-camera` cote app + Open Food Facts cote serveur.
 - Stockage utilisateur prevu : Supabase ou Firebase.
 - Niveau actuel : debutant, besoin de commandes pas a pas.
 
@@ -54,6 +55,9 @@ Application mobile de suivi nutritionnel :
 - `ciqual_extras.json` : ajouts recents : legumes, plats, sauces, desserts, boissons.
 - `ALIMENTS_DISPONIBLES.md` : liste lisible de tous les aliments disponibles pour Claude.
 - `app/(tabs)/index.tsx` : ecran principal de l'app React Native.
+- `app/(tabs)/scan.tsx` : ecran scanner code-barres.
+- `app/(tabs)/_layout.tsx` : onglets de l'app.
+- `.github/workflows/android-apk.yml` : build APK Android via GitHub Actions.
 - `SUIVI_PROJET_CALORIES.md` : resume de projet a coller au debut des prochaines conversations.
 
 ---
@@ -68,20 +72,33 @@ Application mobile de suivi nutritionnel :
 7. Le serveur renvoie calories + macros.
 8. L'app affiche l'ecran de confirmation avec modification possible.
 
+Flux scan :
+1. L'utilisateur ouvre l'onglet Scan.
+2. L'app demande l'autorisation camera.
+3. L'app lit le code-barres.
+4. L'app appelle le serveur Railway sur `/barcode/:code`.
+5. Le serveur interroge Open Food Facts.
+6. Le serveur transforme le produit en format compatible avec l'app : nom, calories, proteines, glucides, lipides, quantite.
+7. L'app renvoie le produit scanne vers l'ecran de confirmation.
+
 ---
 
 ## Ce qui fonctionne
 - App installee sur Samsung en development build.
 - Ecran principal avec compteur de calories.
 - Saisie manuelle d'un repas.
-- Dictee vocale continue, mais elle doit encore etre fiabilisee.
+- Dictee vocale continue amelioree : le texte s'accumule pendant les pauses.
+- Le micro se coupe automatiquement quand on lance l'analyse.
 - Analyse de plusieurs aliments en une seule dictee.
 - Interface de confirmation avec colonnes Aliment / Quantite / Calories.
+- Macros visibles : proteines, glucides, lipides sur l'ecran principal et l'ecran de confirmation.
 - Modification d'un aliment puis bouton OK pour recalculer.
 - Suppression d'un aliment avec bouton X.
 - Ajout manuel d'un aliment avec bouton +.
 - Calories et macros renvoyees par le serveur.
 - Base Ciqual + extras fonctionnelle.
+- Onglet Scan ajoute avec Open Food Facts, a valider demain avec plusieurs vrais produits.
+- APK Android construite via GitHub Actions quand Expo/EAS bloque au telechargement.
 - Railway connecte a GitHub pour deploiement automatique.
 
 ---
@@ -211,6 +228,153 @@ Application mobile de suivi nutritionnel :
 - Git push effectue pour declencher Railway.
 - Pas de build EAS necessaire pour les corrections backend.
 
+### Session 10 - 2-3 mai 2026
+
+#### 1. Correction de la dictee vocale
+- Probleme : si l'utilisateur faisait une pause, la dictee pouvait remplacer le texte au lieu de l'accumuler.
+- Correction dans `app/(tabs)/index.tsx` :
+  - accumulation du texte reconnu pendant les pauses.
+  - conservation du texte final + texte intermediaire.
+  - lancement/arrete du micro plus propre.
+  - quand on appuie sur `Analyser`, le micro se coupe automatiquement.
+  - quand on appuie sur `Recommencer`, le micro est aussi coupe et le texte est nettoye.
+- Objectif : eviter que des phrases dites apres l'analyse se retrouvent dans le repas suivant.
+
+#### 2. Affichage des macros
+- Ajout des macros principales dans l'app :
+  - proteines
+  - glucides
+  - lipides
+- Sur l'ecran principal : total journalier des macros.
+- Sur l'ecran de confirmation : total du repas + ligne macros par aliment.
+- Les valeurs viennent deja du serveur, donc pas de nouveau cout IA.
+
+#### 3. Corrections pates, sauces, tartines et pain
+- Probleme : `carbonara` et `bolognaise` seules pouvaient sortir a 0.
+- Correction : les sauces seules sont reconnues avec une portion standard de 80g.
+- Le prompt Claude demande maintenant de separer :
+  - `pates carbonara` -> pates + sauce carbonara.
+  - `pates bolognaise` -> pates + sauce bolognaise.
+  - tartines/pain avec beurre, Nutella ou beurre de cacahuete -> pain + garniture.
+- Ajouts et defauts :
+  - pain / tartine : 50g.
+  - pain complet : 50g.
+  - baguette : 50g.
+  - beurre : 10g.
+  - beurre de cacahuete : 20g.
+  - Nutella / pate a tartiner chocolat noisette : 20g.
+- Nutella est reconnu directement, pas besoin de dire obligatoirement `pate a tartiner`.
+
+#### 4. Tests locaux des nouveaux defauts
+- `carbonara` -> 80g -> environ 208 kcal.
+- `bolognaise` -> 80g -> environ 88 kcal.
+- `tartine` -> 50g -> environ 133 kcal.
+- `pain complet` -> 50g -> environ 122 kcal.
+- `beurre` -> 10g -> environ 75 kcal.
+- `beurre de cacahuete` -> 20g -> environ 118 kcal.
+- `Nutella` -> 20g -> environ 108 kcal.
+- `tranche de pain complet` -> 50g -> environ 122 kcal.
+
+#### 5. Ajout du scanner code-barres
+- Installation de `expo-camera`.
+- Ajout de la permission camera dans `app.json`.
+- Creation de l'ecran `app/(tabs)/scan.tsx`.
+- Ajout de l'onglet Scan dans `app/(tabs)/_layout.tsx`.
+- Ajout d'une icone scan dans `components/ui/icon-symbol.tsx`.
+- Le scanner lit les codes EAN/UPC.
+- Le scanner appelle le serveur Railway, puis renvoie le produit scanne vers l'ecran de confirmation.
+
+#### 6. Open Food Facts cote serveur
+- Ajout d'une route backend :
+```text
+GET /barcode/:code
+```
+- Le serveur appelle Open Food Facts API v2.
+- Le serveur transforme le produit en format compatible avec l'app :
+  - nom
+  - quantite
+  - unite
+  - calories
+  - proteines
+  - glucides
+  - lipides
+  - sucres
+  - fibres
+  - code-barres
+  - source `openfoodfacts`
+- Quantite par defaut :
+  - portion indiquee par Open Food Facts si disponible.
+  - sinon 100g.
+- Open Food Facts est gratuit et suffisant au debut. A surveiller plus tard si l'app grossit fortement.
+
+#### 7. Tests techniques apres ajout scanner
+- `node --check server.js` : OK.
+- `npx tsc --noEmit` : OK.
+- `npx expo lint` : OK.
+- Simulation locale d'un produit Open Food Facts : OK.
+
+#### 8. Commits/push realises
+- `5aafec7 fix dictee macros sauces tartines`
+- `af9c8ea add barcode scanner`
+- `14b4c76 add github apk build`
+
+#### 9. Build EAS et probleme de telechargement
+- Build EAS lance :
+```powershell
+eas build --profile development --platform android
+```
+- Build reussi cote Expo.
+- Build ID :
+```text
+c58f7d4f-242f-4ad7-8d2d-0a8463dfaf9d
+```
+- Probleme rencontre : le telechargement de l'APK depuis Expo/Cloudflare R2 etait inaccessible depuis le PC et le telephone.
+- Erreurs vues :
+  - `ERR_CONNECTION_TIMED_OUT`
+  - site inaccessible vers `cloudflarestorage.com`
+
+#### 10. Contournement avec GitHub Actions
+- Creation d'un workflow GitHub Actions pour construire une APK Android directement sur GitHub.
+- Fichier ajoute :
+```text
+.github/workflows/android-apk.yml
+```
+- Le workflow :
+  - installe Node.
+  - installe Java.
+  - fait `npm ci`.
+  - genere le projet Android avec Expo.
+  - construit une APK debug.
+  - publie un artefact `CalorieApp-debug-apk`.
+- Build GitHub Actions reussi en environ 18 minutes.
+- L'utilisateur a pu recuperer l'APK via GitHub Actions.
+
+#### 11. Installation APK et point important ExpoCamera
+- Une premiere erreur est apparue :
+```text
+Cannot find native module 'ExpoCamera'
+```
+- Cause : l'ancienne app native etait encore installee ou connectee a un bundle JS qui utilisait `expo-camera`.
+- Correction :
+  - installer la nouvelle APK qui contient `expo-camera`.
+  - si besoin, desinstaller l'ancienne CalorieApp avant de reinstaller.
+  - relancer Expo avec le cache vide :
+```powershell
+cd C:\Users\arnau\CalorieApp
+npx expo start --dev-client -c
+```
+- Le `-c` signifie vider le cache Metro/Expo.
+
+#### 12. Etat en fin de session
+- L'app semble se lancer avec la nouvelle APK.
+- Le scanner a ete ajoute mais doit encore etre teste demain avec de vrais produits.
+- A verifier demain :
+  - autorisation camera.
+  - apparition de l'onglet Scan.
+  - scan Coca-Cola, yaourt, Nutella ou autre produit industriel.
+  - retour du produit scanne dans l'ecran de confirmation.
+  - modification de la quantite apres scan.
+
 ---
 
 ## Valeurs par defaut actuelles
@@ -234,6 +398,12 @@ Application mobile de suivi nutritionnel :
 - Plats composes : 300g.
 - Frites : 150g.
 - Desserts individuels : 100g.
+- Pain / tartine : 50g.
+- Pain complet : 50g.
+- Baguette : 50g.
+- Beurre : 10g.
+- Beurre de cacahuete : 20g.
+- Nutella / pate a tartiner chocolat noisette : 20g.
 - Sauce pesto/ketchup/moutarde/barbecue/soja : 30g.
 - Sauces standard : 80g.
 - Sodas : 330ml.
@@ -256,6 +426,13 @@ Noter l'adresse IPv4, par exemple `192.168.1.140`.
 cd C:\Users\arnau\CalorieApp
 npx expo start --dev-client
 ```
+
+Si l'app vient d'etre reinstalllee ou si un module natif a ete ajoute, utiliser plutot :
+```powershell
+cd C:\Users\arnau\CalorieApp
+npx expo start --dev-client -c
+```
+Le `-c` vide le cache Expo/Metro.
 
 ### 3. Connecter le telephone
 Sur le Samsung :
@@ -289,6 +466,38 @@ https://calorie-server-production.up.railway.app
 
 ---
 
+## Procedure APK Android
+
+### Cas normal : build EAS
+Apres un changement natif Expo/Android, par exemple ajout de `expo-camera` :
+```powershell
+cd C:\Users\arnau\CalorieApp
+eas build --profile development --platform android
+```
+
+### Contournement si Expo/Cloudflare bloque le telechargement
+Utiliser GitHub Actions :
+1. Aller sur GitHub.
+2. Ouvrir le repo `calorie-server`.
+3. Onglet `Actions`.
+4. Ouvrir `Build Android APK`.
+5. Attendre le statut vert `Success`.
+6. Ouvrir le run.
+7. Descendre jusqu'a `Artifacts`.
+8. Telecharger `CalorieApp-debug-apk`.
+9. Extraire le ZIP.
+10. Installer `app-debug.apk` sur le Samsung.
+
+Important :
+- Si Android refuse l'installation, desinstaller l'ancienne CalorieApp puis reinstaller la nouvelle APK.
+- Apres installation, relancer Expo avec :
+```powershell
+cd C:\Users\arnau\CalorieApp
+npx expo start --dev-client -c
+```
+
+---
+
 ## Regles importantes pour coder
 - Ne jamais coller de cle API dans le code.
 - Les cles restent dans les variables d'environnement Railway ou dans les fichiers personnels non commits.
@@ -308,17 +517,32 @@ npx tsc --noEmit
 
 ## Prochains objectifs court terme
 
-### Priorite 1 - Fixer la dictee
-- Probleme actuel : la dictee peut remplacer le texte au lieu de l'accumuler.
-- Objectif : accumuler les morceaux de phrase proprement.
-- Eviter les doublons si la reconnaissance renvoie plusieurs resultats intermediaires.
-- Garder un bouton simple : appuyer pour demarrer, appuyer pour arreter.
+### Priorite 1 - Tester le scanner demain
+- Verifier que l'onglet Scan apparait.
+- Autoriser la camera.
+- Scanner plusieurs produits reels :
+  - Coca-Cola.
+  - yaourt.
+  - Nutella.
+  - un produit sale industriel.
+- Verifier que le produit arrive dans l'ecran de confirmation.
+- Verifier calories + proteines + glucides + lipides.
+- Verifier qu'on peut modifier la quantite apres scan.
 
-### Priorite 2 - Faire apparaitre les macros dans l'app
-- Afficher proteines, glucides, lipides, sucres, fibres.
-- Afficher les macros par aliment dans l'ecran de confirmation.
-- Afficher un total macros pour le repas.
-- Plus tard : afficher un total macros journalier.
+### Priorite 2 - Retester les corrections alimentaires
+- Dictee avec pause longue.
+- Recommencer apres une analyse.
+- Pates carbonara.
+- Pates bolognaise.
+- Tartine beurre.
+- Pain complet Nutella.
+- Beurre de cacahuete.
+
+### Priorite 3 - Ameliorer le scan si les tests sont bons
+- Ajouter saisie manuelle d'un code-barres si le scan camera rate.
+- Mieux gerer les portions Open Food Facts.
+- Afficher image et marque du produit si utile.
+- Plus tard : sauvegarder les produits scannes les plus frequents.
 
 ---
 
@@ -327,7 +551,7 @@ npx tsc --noEmit
 - Remise a zero automatique a minuit.
 - Sauvegarde cloud avec Supabase ou Firebase.
 - Creation de compte Apple ID / Google.
-- Scan code-barres avec Open Food Facts.
+- Stabilisation scan code-barres avec Open Food Facts.
 - Bases nutritionnelles autres langues : BEDCA pour Espagne, USDA pour USA.
 - Programmes sportifs en option payante.
 - Publication Play Store.
