@@ -1,9 +1,9 @@
 # Suivi de Projet - Application Calories & Macros
 
 ## Derniere mise a jour
-- Date : 2-3 mai 2026
-- Session : 10
-- Etat : backend Railway deploye, app Android mise a jour avec scanner, APK GitHub installee/en test
+- Date : 3 mai 2026
+- Session : 11
+- Etat : code pousse avec repas, scan multiple, defauts apero, sauvegarde locale et historique. Nouvelle APK Android a reconstruire avant de tester AsyncStorage.
 
 ---
 
@@ -43,7 +43,8 @@ Application mobile de suivi nutritionnel :
 - Base courte envoyee a Claude : aliments courants + extras.
 - Fichier extras : `ciqual_extras.json`.
 - Scan produit : `expo-camera` cote app + Open Food Facts cote serveur.
-- Stockage utilisateur prevu : Supabase ou Firebase.
+- Stockage local : `@react-native-async-storage/async-storage`.
+- Stockage cloud prevu plus tard : Supabase ou Firebase.
 - Niveau actuel : debutant, besoin de commandes pas a pas.
 
 ---
@@ -58,6 +59,7 @@ Application mobile de suivi nutritionnel :
 - `app/(tabs)/scan.tsx` : ecran scanner code-barres.
 - `app/(tabs)/_layout.tsx` : onglets de l'app.
 - `.github/workflows/android-apk.yml` : build APK Android via GitHub Actions.
+- `package.json` / `package-lock.json` : dependances Expo/React Native, dont AsyncStorage.
 - `SUIVI_PROJET_CALORIES.md` : resume de projet a coller au debut des prochaines conversations.
 
 ---
@@ -81,6 +83,14 @@ Flux scan :
 6. Le serveur transforme le produit en format compatible avec l'app : nom, calories, proteines, glucides, lipides, quantite.
 7. L'app renvoie le produit scanne vers l'ecran de confirmation.
 
+Flux repas / sauvegarde locale :
+1. L'utilisateur choisit un repas : petit dejeuner, dejeuner, diner ou collation.
+2. Il ajoute des aliments par dictee, saisie texte ou scan.
+3. Il confirme, les aliments sont ajoutes au repas choisi.
+4. L'app sauvegarde automatiquement les repas du jour dans le stockage local du telephone.
+5. Quand la date change, l'ancienne journee est archivee et la nouvelle journee repart a zero.
+6. L'ecran Historique affiche les anciennes journees avec calories, macros et aliments.
+
 ---
 
 ## Ce qui fonctionne
@@ -97,7 +107,16 @@ Flux scan :
 - Ajout manuel d'un aliment avec bouton +.
 - Calories et macros renvoyees par le serveur.
 - Base Ciqual + extras fonctionnelle.
-- Onglet Scan ajoute avec Open Food Facts, a valider demain avec plusieurs vrais produits.
+- Onglet Scan fonctionnel avec Open Food Facts.
+- Possibilite de scanner plusieurs produits dans le meme repas sans perdre les produits deja ajoutes.
+- Produits scannes recalcules proportionnellement quand on modifie la quantite.
+- Boissons scannees gerees en ml quand Open Food Facts indique une boisson.
+- Quatre repas disponibles : petit dejeuner, dejeuner, diner, collation.
+- Detail d'un repas avec total calories/macros et liste des aliments.
+- Dans un repas deja enregistre, on peut modifier un aliment, recalculer avec OK ou supprimer avec X.
+- Sauvegarde locale ajoutee avec AsyncStorage.
+- Historique simple ajoute : les journees precedentes sont archivees localement.
+- Remise a zero automatique prevue au changement de date.
 - APK Android construite via GitHub Actions quand Expo/EAS bloque au telechargement.
 - Railway connecte a GitHub pour deploiement automatique.
 
@@ -375,6 +394,142 @@ npx expo start --dev-client -c
   - retour du produit scanne dans l'ecran de confirmation.
   - modification de la quantite apres scan.
 
+### Session 11 - 3 mai 2026
+
+#### 1. Scan valide sur produits reels
+- Le scan code-barres fonctionne sur le Samsung.
+- Test positif avec des produits reels dont Philadelphia et boissons.
+- Les produits scannes arrivent bien dans l'ecran de confirmation.
+- Le bouton `Scanner un autre produit` permet maintenant d'ajouter plusieurs produits scannes dans le meme repas sans perdre le produit precedent.
+- Correction du flux Scan -> Confirmation : le repas actif est conserve.
+
+#### 2. Correction des produits scannes en ml
+- Probleme : une biere scannee affichait parfois `100g` alors que Open Food Facts donnait les valeurs pour `100ml`.
+- Correction : le serveur detecte mieux les boissons scannees et renvoie l'unite `ml`.
+- Exemples vises :
+  - biere -> ml.
+  - soda -> ml.
+  - boisson lactee/jus -> ml si reconnu comme boisson.
+
+#### 3. Correction du recalcul des produits scannes
+- Probleme : si un produit scanne etait modifie de `100ml` a `300ml`, les calories pouvaient tomber a 0.
+- Correction dans l'app :
+  - les produits scannes conservent leurs valeurs pour 100g/100ml.
+  - si l'utilisateur change la quantite, l'app recalcule proportionnellement sans rappeler Claude.
+- Exemple attendu :
+  - biere 100ml = 67 kcal.
+  - biere 300ml = environ 201 kcal.
+
+#### 4. Warning CameraView
+- Warning vu dans le terminal :
+```text
+The <CameraView> component does not support children.
+```
+- Signification : Expo conseille de ne pas mettre du contenu directement comme enfant de `CameraView`.
+- Ce n'est pas une erreur bloquante.
+- A corriger plus tard proprement en mettant les elements par-dessus la camera avec du positionnement absolu si besoin.
+
+#### 5. Repas de la journee
+- Ajout d'une organisation en 4 repas :
+  - Petit dejeuner.
+  - Dejeuner.
+  - Diner.
+  - Collation.
+- L'utilisateur choisit le repas avant d'ajouter des aliments.
+- Chaque repas affiche son total calories et macros.
+- L'ecran principal affiche le total de la journee.
+- Les aliments restent visibles dans chaque repas.
+- La derniere ligne descriptive inutile a ete retiree, mais les noms des aliments restent visibles.
+
+#### 6. Detail d'un repas
+- Quand on ouvre un repas deja enregistre, on voit :
+  - total calories du repas.
+  - macros du repas.
+  - liste des aliments.
+- Ajout possible dans un repas deja existant avec `Ajouter a ce repas`.
+- Modification possible d'un aliment deja enregistre.
+- Suppression possible d'un aliment deja enregistre.
+- Recalcul possible avec bouton `OK`.
+
+#### 7. Correction fromage
+- Probleme : `fromage` seul pouvait donner une portion trop grande ou un resultat peu coherent.
+- Correction :
+  - `fromage` sans precision -> portion standard 30g.
+  - aliment par defaut : emmental/fromage moyen.
+- L'objectif est d'eviter les 200g de fromage par defaut.
+
+#### 8. Correction tartine / pain
+- Probleme : `tartine de Nutella` affichait `tartine` au lieu de `pain`.
+- Correction :
+  - `tartine` est interprete comme pain.
+  - affichage souhaite : `pain` avec 50g.
+  - `tartine de Nutella` -> pain 50g + Nutella 20g.
+  - `tartine de beurre` -> pain 50g + beurre 10g.
+  - `tartine de beurre de cacahuete` -> pain 50g + beurre de cacahuete 20g.
+
+#### 9. Correction liquides et verre de lait
+- Probleme : `un verre de lait` pouvait sortir a 0 alors que `100ml de lait` fonctionnait.
+- Correction :
+  - lait sans volume ou verre de lait -> 150ml.
+  - verre de liquide generique -> 150ml.
+  - exception soda -> 330ml.
+  - exception biere -> 330ml.
+  - exception alcool fort -> 50ml.
+- Objectif : garder une logique simple et coherente pour les boissons.
+
+#### 10. Correction chips et apero
+- Probleme : `chips` pouvait sortir a 0g.
+- Correction chips :
+  - `chips` ou `chip` -> 30g.
+- Extension aux aliments d'apero / poignee :
+  - cacahuetes.
+  - amandes.
+  - noix.
+  - noisettes.
+  - pistaches.
+  - raisins secs.
+  - abricots secs.
+  - dattes.
+  - figues seches.
+  - fruits secs melanges.
+- Portion par defaut : 30g.
+- Ajouts dans `ciqual_extras.json` quand l'aliment n'etait pas disponible.
+
+#### 11. Sauvegarde locale, remise a zero et historique
+- Installation de :
+```text
+@react-native-async-storage/async-storage
+```
+- Ajout de la sauvegarde locale automatique dans `app/(tabs)/index.tsx`.
+- Les repas du jour sont sauvegardes sur le telephone.
+- Au redemarrage de l'app, les repas du jour sont recharges.
+- Quand la date change :
+  - la journee precedente est archivee.
+  - la nouvelle journee repart a zero.
+- Ajout d'un ecran `Historique`.
+- L'historique affiche :
+  - date.
+  - calories de la journee.
+  - macros de la journee.
+  - repas remplis avec aliments.
+- Limite actuelle : 30 journees conservees localement.
+
+#### 12. Commits/push realises pendant la session
+- `be98d8b fix recalcul produits scannes`
+- `f4cd904 add meal sections and cheese default`
+- `e2275f4 edit meal foods and fix tartines`
+- `40059f2 fix drink defaults`
+- `d7c749f fix chips default`
+- `d617760 fix chips default`
+- `ac4e1d1 fix apero handful defaults`
+- `dac1b68 add local history and daily reset`
+
+#### 13. Etat en fin de session 11
+- Le code de la sauvegarde locale et de l'historique est pousse.
+- La nouvelle APK Android n'a pas encore ete reconstruite.
+- Comme AsyncStorage est un module natif, il faut reconstruire une APK avant de tester cette partie sur le Samsung.
+- Prochaine reprise : commencer directement par le build Android.
+
 ---
 
 ## Valeurs par defaut actuelles
@@ -387,6 +542,7 @@ npx expo start --dev-client -c
 - Biscuit : 15g.
 - Tranche : 30g.
 - Verre generique : 200g si utilise comme piece.
+- Verre de liquide : 150ml.
 - Tasse : 250g.
 - Cuillere : 15g.
 - Portion generique : 300g.
@@ -404,9 +560,14 @@ npx expo start --dev-client -c
 - Beurre : 10g.
 - Beurre de cacahuete : 20g.
 - Nutella / pate a tartiner chocolat noisette : 20g.
+- Fromage : 30g.
+- Chips : 30g.
+- Cacahuetes/amandes/noix/noisettes/pistaches/fruits secs : 30g.
 - Sauce pesto/ketchup/moutarde/barbecue/soja : 30g.
 - Sauces standard : 80g.
 - Sodas : 330ml.
+- Bieres : 330ml.
+- Lait / verre de lait : 150ml.
 - Verre de vin : 150ml.
 - Alcool fort : 50ml.
 
@@ -464,15 +625,39 @@ Lien serveur Railway :
 https://calorie-server-production.up.railway.app
 ```
 
+Apres une modification app/documentation :
+```powershell
+cd C:\Users\arnau\CalorieApp
+git status
+git add package.json package-lock.json "app/(tabs)/index.tsx" SUIVI_PROJET_CALORIES.md
+git commit -m "message sans accents"
+git push
+```
+
 ---
 
 ## Procedure APK Android
 
 ### Cas normal : build EAS
-Apres un changement natif Expo/Android, par exemple ajout de `expo-camera` :
+Apres un changement natif Expo/Android, par exemple ajout de `expo-camera` ou `AsyncStorage` :
 ```powershell
 cd C:\Users\arnau\CalorieApp
 eas build --profile development --platform android
+```
+
+Pour la prochaine reprise, commencer ici :
+```powershell
+cd C:\Users\arnau\CalorieApp
+eas build --profile development --platform android
+```
+
+Si Expo demande :
+```text
+Install and run the Android build on an emulator?
+```
+Repondre :
+```text
+n
 ```
 
 ### Contournement si Expo/Cloudflare bloque le telechargement
@@ -517,40 +702,47 @@ npx tsc --noEmit
 
 ## Prochains objectifs court terme
 
-### Priorite 1 - Tester le scanner demain
-- Verifier que l'onglet Scan apparait.
-- Autoriser la camera.
-- Scanner plusieurs produits reels :
-  - Coca-Cola.
-  - yaourt.
-  - Nutella.
-  - un produit sale industriel.
-- Verifier que le produit arrive dans l'ecran de confirmation.
-- Verifier calories + proteines + glucides + lipides.
-- Verifier qu'on peut modifier la quantite apres scan.
+### Priorite 1 - Reconstruire l'APK Android
+- Faire le build Android parce que `AsyncStorage` est un module natif.
+- Installer la nouvelle APK sur le Samsung.
+- Si le telechargement Expo bloque encore, utiliser GitHub Actions comme contournement.
+- Relancer ensuite Expo avec cache vide :
+```powershell
+cd C:\Users\arnau\CalorieApp
+npx expo start --dev-client -c
+```
 
-### Priorite 2 - Retester les corrections alimentaires
-- Dictee avec pause longue.
-- Recommencer apres une analyse.
-- Pates carbonara.
-- Pates bolognaise.
-- Tartine beurre.
-- Pain complet Nutella.
-- Beurre de cacahuete.
+### Priorite 2 - Tester sauvegarde locale et historique
+- Ajouter un petit dejeuner.
+- Fermer l'app.
+- Rouvrir l'app.
+- Verifier que le petit dejeuner est toujours la.
+- Ajouter dejeuner/diner/collation.
+- Verifier que les totaux journee sont corrects.
+- Tester l'ecran Historique.
+- Tester le changement de jour des que possible.
 
-### Priorite 3 - Ameliorer le scan si les tests sont bons
-- Ajouter saisie manuelle d'un code-barres si le scan camera rate.
-- Mieux gerer les portions Open Food Facts.
-- Afficher image et marque du produit si utile.
-- Plus tard : sauvegarder les produits scannes les plus frequents.
+### Priorite 3 - Tester en conditions reelles pendant une semaine
+- Utiliser l'app tous les jours pour compter les calories.
+- Noter les aliments qui sortent a 0.
+- Noter les produits scannes mal reconnus.
+- Noter les portions par defaut qui semblent fausses.
+- Verifier si l'app est assez pratique au quotidien.
+
+### Priorite 4 - Preparation mode autonome sans PC
+- Aujourd'hui l'app en dev client peut encore demander Expo/Metro selon le mode de lancement.
+- Pour tester au restaurant sans PC, il faudra passer a une APK preview/standalone avec le JavaScript integre.
+- A faire quand les repas + historique sont suffisamment stables.
 
 ---
 
 ## Prochaines etapes apres court terme
-- Journal alimentaire jour par jour.
-- Remise a zero automatique a minuit.
+- APK preview/standalone pour utiliser l'app sans ordinateur.
 - Sauvegarde cloud avec Supabase ou Firebase.
 - Creation de compte Apple ID / Google.
+- Historique plus complet avec selection par date.
+- Objectifs calories/macros personnels.
+- Graphiques hebdomadaires.
 - Stabilisation scan code-barres avec Open Food Facts.
 - Bases nutritionnelles autres langues : BEDCA pour Espagne, USDA pour USA.
 - Programmes sportifs en option payante.
