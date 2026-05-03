@@ -45,8 +45,10 @@ const SAUCES_STANDARD = ['carbonara', 'bolognaise', 'tomate', 'bechamel', 'b\u00
 const FRITES = ['frite', 'frites'];
 const DESSERTS_PORTION = ['tiramisu', 'dessert', 'gateau', 'g\u00e2teau', 'mousse', 'creme dessert', 'cr\u00e8me dessert', 'profiterole', 'baba au rhum'];
 const SODAS = ['cola', 'coca', 'coca-cola', 'soda', 'limonade'];
+const BIERES = ['biere', 'bi\u00e8re', 'beer', 'cerveza', 'panache', 'panach\u00e9'];
 const VINS = ['vin', 'verre de vin'];
 const ALCOOLS_FORTS = ['rhum', 'vodka', 'whisky', 'cognac', 'armagnac', 'eau de vie', 'gin', 'tequila', 'pastis'];
+const LAITS = ['lait', 'verre de lait'];
 const PAINS = ['pain', 'pain complet', 'pain integral', 'pain int\u00e9gral', 'pain de mie', 'tartine', 'baguette'];
 const PATES_A_TARTINER = ['nutella', 'pate a tartiner', 'p\u00e2te a tartiner', 'pate \u00e0 tartiner', 'p\u00e2te \u00e0 tartiner', 'chocolat noisette'];
 const BEURRES_CACAHUETE = ['beurre de cacahuete', 'beurre de cacahu\u00e8te', 'peanut butter'];
@@ -74,7 +76,7 @@ function estFeculent(nom) {
 }
 
 function estBoisson(nom) {
-  if (estSoda(nom) || estVin(nom) || estAlcoolFort(nom)) return true;
+  if (estSoda(nom) || estBiere(nom) || estVin(nom) || estAlcoolFort(nom)) return true;
   const n = normaliserNom(nom);
   const mots = motsSignificatifs(nom);
   return BOISSONS.some((v) => {
@@ -134,6 +136,15 @@ function estSoda(nom) {
   return SODAS.some(v => mots.includes(normaliserNom(v)));
 }
 
+function estBiere(nom) {
+  const n = normaliserNom(nom);
+  const mots = motsSignificatifs(nom);
+  return BIERES.some((v) => {
+    const nv = normaliserNom(v);
+    return nv.includes(' ') ? n.includes(nv) : mots.includes(nv);
+  });
+}
+
 function estVin(nom) {
   const n = normaliserNom(nom);
   const mots = motsSignificatifs(nom);
@@ -144,6 +155,20 @@ function estAlcoolFort(nom) {
   const n = normaliserNom(nom);
   if (n.includes('baba')) return false;
   return ALCOOLS_FORTS.some(v => n.includes(normaliserNom(v)));
+}
+
+function estLait(nom) {
+  const n = normaliserNom(nom);
+  const mots = motsSignificatifs(nom);
+  if (n.includes('lait de coco') || mots.includes('laitue')) return false;
+  return LAITS.some(v => n.includes(normaliserNom(v))) || mots.includes('lait');
+}
+
+function getNomCiqualLait(nom) {
+  const n = normaliserNom(nom);
+  if (n.includes('entier')) return 'lait entier, uht';
+  if (n.includes('ecreme')) return 'lait \u00e9cr\u00e9m\u00e9, uht';
+  return 'lait demi-\u00e9cr\u00e9m\u00e9, uht';
 }
 
 function estPain(nom) {
@@ -446,6 +471,20 @@ function appliquerDefauts(a) {
       a.nom_ciqual = 'cola, sucr\u00e9';
     }
     appliquerDefautVolume(a, 330);
+    return a;
+  }
+
+  if (estBiere(nom)) {
+    a.nom_ciqual = nom.includes('panache') ? 'panach\u00e9 (limonade et bi\u00e8re)' : 'bi\u00e8re blanche';
+    a.nom_original = nom.includes('panache') ? 'panach\u00e9' : 'bi\u00e8re';
+    appliquerDefautVolume(a, 330);
+    return a;
+  }
+
+  if (estLait(nom)) {
+    a.nom_ciqual = getNomCiqualLait(nom);
+    a.nom_original = 'lait';
+    appliquerDefautVolume(a, 150);
     return a;
   }
 
