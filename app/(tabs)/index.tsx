@@ -1,4 +1,5 @@
 import { View, Text, StyleSheet, TouchableOpacity, TextInput, Alert, ScrollView } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useEffect, useRef, useState } from 'react';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSpeechRecognitionEvent, ExpoSpeechRecognitionModule } from 'expo-speech-recognition';
@@ -45,7 +46,21 @@ type Totaux = {
   lipides: number;
 };
 
+type Etape = 'accueil' | 'saisie' | 'confirmation' | 'detailRepas' | 'historique';
+
+type JourHistorique = {
+  date: string;
+  repas: Repas[];
+};
+
+type DonneesSauvegardees = {
+  dateCourante: string;
+  repasJour: Repas[];
+  historique: JourHistorique[];
+};
+
 const SPEECH_OPTIONS = { lang: 'fr-FR', interimResults: true, continuous: true };
+const STORAGE_KEY = 'calorie-app-data-v1';
 
 const REPAS_OPTIONS: { id: RepasId; nom: string }[] = [
   { id: 'petitDejeuner', nom: 'Petit dejeuner' },
@@ -55,6 +70,54 @@ const REPAS_OPTIONS: { id: RepasId; nom: string }[] = [
 ];
 
 const creerRepasJour = (): Repas[] => REPAS_OPTIONS.map((repas) => ({ ...repas, aliments: [] }));
+
+const getDateLocale = () => {
+  const maintenant = new Date();
+  const annee = maintenant.getFullYear();
+  const mois = String(maintenant.getMonth() + 1).padStart(2, '0');
+  const jour = String(maintenant.getDate()).padStart(2, '0');
+  return `${annee}-${mois}-${jour}`;
+};
+
+const formatDateHistorique = (date: string) => {
+  const [annee, mois, jour] = date.split('-');
+  if (!annee || !mois || !jour) return date;
+  return `${jour}/${mois}/${annee}`;
+};
+
+const normaliserRepasJour = (repas?: Partial<Repas>[] | null): Repas[] => (
+  REPAS_OPTIONS.map((option) => {
+    const repasSauvegarde = Array.isArray(repas) ? repas.find((item) => item.id === option.id) : undefined;
+    return {
+      ...option,
+      aliments: Array.isArray(repasSauvegarde?.aliments) ? repasSauvegarde.aliments.map(enrichirProduitScanne) : [],
+    };
+  })
+);
+
+const normaliserHistorique = (historique?: Partial<JourHistorique>[] | null): JourHistorique[] => {
+  if (!Array.isArray(historique)) return [];
+
+  return historique
+    .filter((jour) => typeof jour?.date === 'string')
+    .map((jour) => ({
+      date: jour.date as string,
+      repas: normaliserRepasJour(jour.repas),
+    }))
+    .slice(0, 30);
+};
+
+const jourEstVide = (repas: Repas[]) => repas.every((item) => item.aliments.length === 0);
+
+const creerJourHistorique = (date: string, repas: Repas[]): JourHistorique => ({
+  date,
+  repas: normaliserRepasJour(repas),
+});
+
+const ajouterJourHistorique = (historique: JourHistorique[], jour: JourHistorique) => {
+  if (jourEstVide(jour.repas)) return historique;
+  return [jour, ...historique.filter((item) => item.date !== jour.date)].slice(0, 30);
+};
 
 const nettoyerTexte = (valeur: string) => valeur.trim().replace(/\s+/g, ' ');
 
@@ -153,7 +216,10 @@ export default function HomeScreen() {
   const [repasJour, setRepasJour] = useState<Repas[]>(creerRepasJour);
   const [repasActif, setRepasActif] = useState<RepasId | null>(null);
   const [aliments, setAliments] = useState<Aliment[]>([]);
-  const [etape, setEtape] = useState<'accueil' | 'saisie' | 'confirmation' | 'detailRepas'>('accueil');
+  const [etape, setEtape] = useState<Etape>('accueil');
+  const [dateCourante, setDateCourante] = useState(getDateLocale);
+  const [historique, setHistorique] = useState<JourHistorique[]>([]);
+  const [stockagePret, setStockagePret] = useState(false);
   const [nouvelAliment, setNouvelAliment] = useState('');
   const [ajoutEnCours, setAjoutEnCours] = useState(false);
   const [recalcEnCours, setRecalcEnCours] = useState(-1);
@@ -168,6 +234,95 @@ export default function HomeScreen() {
   };
 
   const nomRepasActif = REPAS_OPTIONS.find((repas) => repas.id === repasActif)?.nom || 'Repas';
+
+  useEffect(() => {
+    let actif = true;
+
+    const chargerSauvegarde = async () => {
+      try {
+        const aujourdhui = getDateLocale();
+        const brut = await AsyncStorage.getItem(STORAGE_KEY);
+
+        if (!brut) {
+          if (!actif) return;
+          setDateCourante(aujourdhui);
+          setRepasJour(creerRepasJour());
+          setHistorique([]);
+          return;
+        }
+
+        const donnees = JSON.parse(brut) as Partial<DonneesSauvegardees>;
+        const repasSauvegardes = normaliserRepasJour(donnees.repasJour);
+        const historiqueSauvegarde = normaliserHistorique(donnees.historique);
+
+        if (!actif) return;
+
+        if (donnees.dateCourante && donnees.dateCourante !== aujourdhui) {
+          setDateCourante(aujourdhui);
+          setRepasJour(creerRepasJour());
+          setHistorique(ajouterJourHistorique(
+            historiqueSauvegarde,
+            creerJourHistorique(donnees.dateCourante, repasSauvegardes)
+          ));
+        } else {
+          setDateCourante(aujourdhui);
+          setRepasJour(repasSauvegardes);
+          setHistorique(historiqueSauvegarde);
+        }
+      } catch (e) {
+        Alert.alert('Erreur sauvegarde', String(e));
+      } finally {
+        if (actif) setStockagePret(true);
+      }
+    };
+
+    chargerSauvegarde();
+
+    return () => {
+      actif = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!stockagePret) return;
+
+    const donnees: DonneesSauvegardees = {
+      dateCourante,
+      repasJour,
+      historique,
+    };
+
+    AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(donnees)).catch((e) => {
+      console.warn('Erreur sauvegarde locale', e);
+    });
+  }, [dateCourante, historique, repasJour, stockagePret]);
+
+  useEffect(() => {
+    if (!stockagePret) return;
+
+    const verifierChangementJour = () => {
+      const aujourdhui = getDateLocale();
+      if (aujourdhui === dateCourante) return;
+
+      setHistorique((historiqueActuel) => ajouterJourHistorique(
+        historiqueActuel,
+        creerJourHistorique(dateCourante, repasJour)
+      ));
+      setDateCourante(aujourdhui);
+      setRepasJour(creerRepasJour());
+      setRepasActif(null);
+      setAliments([]);
+      setTexte('');
+      texteFinalDicteeRef.current = '';
+      texteIntermediaireDicteeRef.current = '';
+      setEtape('accueil');
+    };
+
+    verifierChangementJour();
+    const intervalId = setInterval(verifierChangementJour, 60000);
+
+    return () => clearInterval(intervalId);
+  }, [dateCourante, repasJour, stockagePret]);
 
   useEffect(() => {
     if (!params.scanned || !params.scanId || dernierScanIdRef.current === params.scanId) return;
@@ -583,6 +738,55 @@ export default function HomeScreen() {
     setNouvelAliment('');
   };
 
+  if (!stockagePret) {
+    return (
+      <View style={styles.container}>
+        <Text style={styles.title}>Mes Calories</Text>
+        <Text style={styles.emptyText}>Chargement...</Text>
+      </View>
+    );
+  }
+
+  if (etape === 'historique') {
+    return (
+      <ScrollView contentContainerStyle={styles.container}>
+        <Text style={styles.title}>Historique</Text>
+        {historique.length === 0 ? (
+          <Text style={styles.emptyText}>Aucune journee sauvegardee.</Text>
+        ) : (
+          historique.map((jour) => {
+            const totaux = calculerTotaux(jour.repas.flatMap((repas) => repas.aliments));
+            return (
+              <View key={jour.date} style={styles.historyCard}>
+                <View style={styles.repasCardHeader}>
+                  <Text style={styles.repasTitle}>{formatDateHistorique(jour.date)}</Text>
+                  <Text style={styles.repasCalories}>{totaux.calories} kcal</Text>
+                </View>
+                <Text style={styles.repasMacros}>P {formatMacro(totaux.proteines)}g   G {formatMacro(totaux.glucides)}g   L {formatMacro(totaux.lipides)}g</Text>
+                {jour.repas.map((repas) => {
+                  if (repas.aliments.length === 0) return null;
+
+                  const totauxRepas = calculerTotaux(repas.aliments);
+                  const nomsAliments = repas.aliments.map((aliment) => parseAliment(aliment).nom).filter(Boolean).join(', ');
+
+                  return (
+                    <View key={repas.id} style={styles.historyMealBlock}>
+                      <Text style={styles.historyMealTitle}>{repas.nom} - {totauxRepas.calories} kcal</Text>
+                      <Text style={styles.historyMealFoods}>{nomsAliments}</Text>
+                    </View>
+                  );
+                })}
+              </View>
+            );
+          })
+        )}
+        <TouchableOpacity style={styles.buttonSecondary} onPress={() => setEtape('accueil')}>
+          <Text style={styles.buttonSecondaryText}>Retour</Text>
+        </TouchableOpacity>
+      </ScrollView>
+    );
+  }
+
   if (etape === 'saisie') {
     return (
       <View style={styles.container}>
@@ -778,6 +982,7 @@ export default function HomeScreen() {
       <Text style={styles.title}>Mes Calories</Text>
       <Text style={styles.calories}>{totauxJour.calories}</Text>
       <Text style={styles.subtitle}>calories aujourdhui</Text>
+      <Text style={styles.dateText}>{formatDateHistorique(dateCourante)}</Text>
       <View style={styles.macroSummary}>
         <View style={styles.macroItem}>
           <Text style={styles.macroValue}>{formatMacro(totauxJour.proteines)}g</Text>
@@ -792,6 +997,9 @@ export default function HomeScreen() {
           <Text style={styles.macroLabel}>Lipides</Text>
         </View>
       </View>
+      <TouchableOpacity style={styles.buttonSecondary} onPress={() => setEtape('historique')}>
+        <Text style={styles.buttonSecondaryText}>Historique</Text>
+      </TouchableOpacity>
 
       <Text style={styles.sectionTitle}>Ajouter un repas</Text>
       <View style={styles.mealChoiceGrid}>
@@ -829,6 +1037,7 @@ const styles = StyleSheet.create({
   calories: { fontSize: 80, fontWeight: 'bold', color: '#FF6B6B' },
   caloriesSmall: { fontSize: 54, fontWeight: 'bold', color: '#FF6B6B' },
   subtitle: { fontSize: 18, color: '#999', marginBottom: 16 },
+  dateText: { fontSize: 14, color: '#aaa', marginTop: -8, marginBottom: 12 },
   mealSubtitle: { fontSize: 18, color: '#777', marginTop: -12, marginBottom: 14, fontWeight: 'bold' },
   sectionTitle: { width: '100%', fontSize: 18, fontWeight: 'bold', color: '#333', marginBottom: 10, marginTop: 4 },
   macroSummary: { flexDirection: 'row', width: '100%', backgroundColor: '#f9f9f9', borderRadius: 10, padding: 12, marginBottom: 20 },
@@ -854,6 +1063,10 @@ const styles = StyleSheet.create({
   repasMacros: { fontSize: 13, color: '#777', marginBottom: 6 },
   repasFoods: { fontSize: 14, color: '#333' },
   repasFoodsEmpty: { fontSize: 14, color: '#aaa', fontStyle: 'italic' },
+  historyCard: { width: '100%', backgroundColor: '#f9f9f9', borderRadius: 10, padding: 14, marginBottom: 12 },
+  historyMealBlock: { borderTopWidth: 1, borderTopColor: '#e8e8e8', paddingTop: 8, marginTop: 8 },
+  historyMealTitle: { fontSize: 14, fontWeight: 'bold', color: '#333', marginBottom: 4 },
+  historyMealFoods: { fontSize: 13, color: '#777' },
   emptyText: { width: '100%', color: '#999', textAlign: 'center', fontSize: 16, marginBottom: 20 },
   detailAlimentRow: { width: '100%', flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#f9f9f9', borderRadius: 10, padding: 12, marginBottom: 8 },
   detailAlimentText: { flex: 1, marginRight: 10 },
