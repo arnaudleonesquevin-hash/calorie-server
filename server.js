@@ -43,6 +43,7 @@ const PLATS_COMPOSES = ['ratatouille', 'bourguignon', 'moussaka', 'cassoulet', '
 const SAUCES_PETITES = ['pesto', 'ketchup', 'moutarde', 'barbecue', 'sauce soja', 'nuoc mam', 'nuoc-mam'];
 const SAUCES_STANDARD = ['carbonara', 'bolognaise', 'tomate', 'bechamel', 'b\u00e9chamel', 'fromage', 'fromages', 'roquefort', 'poivre', 'curry', 'basquaise', 'poivrons'];
 const FRITES = ['frite', 'frites'];
+const CHIPS = ['chips'];
 const DESSERTS_PORTION = ['tiramisu', 'dessert', 'gateau', 'g\u00e2teau', 'mousse', 'creme dessert', 'cr\u00e8me dessert', 'profiterole', 'baba au rhum'];
 const SODAS = ['cola', 'coca', 'coca-cola', 'soda', 'limonade'];
 const BIERES = ['biere', 'bi\u00e8re', 'beer', 'cerveza', 'panache', 'panach\u00e9'];
@@ -124,6 +125,11 @@ function getNomCiqualSauce(nom) {
 function estFrites(nom) {
   const n = normaliserNom(nom);
   return FRITES.some(v => n.includes(normaliserNom(v)));
+}
+
+function estChips(nom) {
+  const mots = motsSignificatifs(nom);
+  return CHIPS.some(v => mots.includes(normaliserNom(v)));
 }
 
 function estDessertPortion(nom) {
@@ -495,6 +501,12 @@ function appliquerDefauts(a) {
     if (a.unite === 'piece' && quantite > 0) a.quantite = quantite * 150;
     else if (quantiteAbsente(a.quantite)) a.quantite = 150;
     a.unite = 'gramme';
+    return a;
+  }
+
+  if (estChips(nom)) {
+    a.nom_ciqual = 'chips de pommes de terre nature ou aromatis\u00e9es, standard';
+    appliquerDefautGrammes(a, 30);
     return a;
   }
 
