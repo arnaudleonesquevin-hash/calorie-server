@@ -50,6 +50,28 @@ type Pesee = {
   poids: number;
 };
 
+type BlocSeriesForce = {
+  id: string;
+  series: string;
+  repetitions: string;
+};
+
+type ExerciceForce = {
+  id: string;
+  nom: string;
+  poids: string;
+  blocs: BlocSeriesForce[];
+  repos: string;
+  reglage: string;
+};
+
+type EntrainementForce = {
+  id: string;
+  nom: string;
+  dateCreation: string;
+  exercices: ExerciceForce[];
+};
+
 type Totaux = {
   calories: number;
   proteines: number;
@@ -73,7 +95,7 @@ type ObjectifsNutrition = {
 
 type ObjectifCle = keyof ObjectifsNutrition;
 
-type Etape = 'accueil' | 'saisie' | 'confirmation' | 'detailRepas' | 'historique' | 'detailHistorique' | 'mesAliments' | 'objectifs';
+type Etape = 'accueil' | 'saisie' | 'confirmation' | 'detailRepas' | 'historique' | 'detailHistorique' | 'mesAliments' | 'objectifs' | 'entrainements' | 'force' | 'hiit' | 'detailEntrainementForce';
 
 type JourHistorique = {
   date: string;
@@ -85,6 +107,7 @@ type DonneesSauvegardees = {
   repasJour: Repas[];
   historique: JourHistorique[];
   pesees: Pesee[];
+  entrainementsForce: EntrainementForce[];
   alimentsPerso: AlimentPerso[];
   objectifs: ObjectifsNutrition;
 };
@@ -217,6 +240,72 @@ const ajouterPesee = (pesees: Pesee[], pesee: Pesee) => (
     .sort((a, b) => b.date.localeCompare(a.date))
     .slice(0, 365)
 );
+
+const creerIdLocal = (prefixe: string) => `${prefixe}:${Date.now()}:${Math.round(Math.random() * 100000)}`;
+
+const normaliserBlocsForce = (
+  blocs?: Partial<BlocSeriesForce>[] | null,
+  seriesLegacy?: string,
+  repetitionsLegacy?: string
+): BlocSeriesForce[] => {
+  if (Array.isArray(blocs)) {
+    return blocs
+      .filter((bloc) => bloc && typeof bloc === 'object')
+      .map((bloc) => ({
+        id: typeof bloc.id === 'string' ? bloc.id : creerIdLocal('bloc'),
+        series: typeof bloc.series === 'string' ? bloc.series : '',
+        repetitions: typeof bloc.repetitions === 'string' ? bloc.repetitions : '',
+      }))
+      .slice(0, 30);
+  }
+
+  if (seriesLegacy || repetitionsLegacy) {
+    return [{
+      id: creerIdLocal('bloc'),
+      series: seriesLegacy || '',
+      repetitions: repetitionsLegacy || '',
+    }];
+  }
+
+  return [];
+};
+
+const normaliserEntrainementsForce = (entrainements?: Partial<EntrainementForce>[] | null): EntrainementForce[] => {
+  if (!Array.isArray(entrainements)) return [];
+
+  return entrainements
+    .filter((entrainement) => entrainement && typeof entrainement === 'object')
+    .map((entrainement) => ({
+      id: typeof entrainement.id === 'string' ? entrainement.id : creerIdLocal('force'),
+      nom: typeof entrainement.nom === 'string' ? entrainement.nom : 'Entrainement force',
+      dateCreation: typeof entrainement.dateCreation === 'string' ? entrainement.dateCreation : getDateLocale(),
+      exercices: Array.isArray(entrainement.exercices)
+        ? entrainement.exercices
+          .filter((exercice) => exercice && typeof exercice === 'object')
+          .map((exercice) => {
+            const exerciceBrut = exercice as Partial<ExerciceForce> & {
+              series?: string;
+              repetitions?: string;
+              blocs?: Partial<BlocSeriesForce>[];
+            };
+
+            return {
+              id: typeof exerciceBrut.id === 'string' ? exerciceBrut.id : creerIdLocal('exercice'),
+              nom: typeof exerciceBrut.nom === 'string' ? exerciceBrut.nom : 'Exercice',
+              poids: typeof exerciceBrut.poids === 'string' ? exerciceBrut.poids : '',
+              blocs: normaliserBlocsForce(
+                exerciceBrut.blocs,
+                typeof exerciceBrut.series === 'string' ? exerciceBrut.series : '',
+                typeof exerciceBrut.repetitions === 'string' ? exerciceBrut.repetitions : ''
+              ),
+              repos: typeof exerciceBrut.repos === 'string' ? exerciceBrut.repos : '',
+              reglage: typeof exerciceBrut.reglage === 'string' ? exerciceBrut.reglage : '',
+            };
+          })
+        : [],
+    }))
+    .slice(0, 50);
+};
 
 const jourEstVide = (repas: Repas[]) => repas.every((item) => item.aliments.length === 0);
 
@@ -380,6 +469,22 @@ const nombre = (valeur: unknown) => {
   return Number.isFinite(resultat) ? resultat : 0;
 };
 
+const limiterEntierTexte = (valeur: string, maximum: number) => {
+  const chiffres = valeur.replace(/[^0-9]/g, '');
+  if (!chiffres) return '';
+  return String(Math.min(maximum, Number(chiffres)));
+};
+
+const formatReposForce = (minutesTexte: string, secondesTexte: string) => {
+  const minutes = Math.min(60, Math.max(0, Math.round(nombre(minutesTexte))));
+  const secondes = Math.min(59, Math.max(0, Math.round(nombre(secondesTexte))));
+
+  if (minutes > 0 && secondes > 0) return `${minutes}min ${secondes}s`;
+  if (minutes > 0) return `${minutes}min`;
+  if (secondes > 0) return `${secondes}s`;
+  return '';
+};
+
 const estProduitScanne = (aliment: Aliment) => Boolean(aliment.code_barres || aliment.source === 'Open Food Facts');
 
 const enrichirProduitScanne = (aliment: Aliment): Aliment => {
@@ -439,12 +544,23 @@ export default function HomeScreen() {
   const [historique, setHistorique] = useState<JourHistorique[]>([]);
   const [dateHistoriqueActive, setDateHistoriqueActive] = useState<string | null>(null);
   const [pesees, setPesees] = useState<Pesee[]>([]);
+  const [entrainementsForce, setEntrainementsForce] = useState<EntrainementForce[]>([]);
+  const [entrainementForceActifId, setEntrainementForceActifId] = useState<string | null>(null);
   const [alimentsPerso, setAlimentsPerso] = useState<AlimentPerso[]>([]);
   const [objectifs, setObjectifs] = useState<ObjectifsNutrition>(OBJECTIFS_DEFAUT);
   const [stockagePret, setStockagePret] = useState(false);
   const [nouvelAliment, setNouvelAliment] = useState('');
   const [peseeDate, setPeseeDate] = useState(formatDateHistorique(getDateLocale()));
   const [peseePoids, setPeseePoids] = useState('');
+  const [nomNouvelEntrainementForce, setNomNouvelEntrainementForce] = useState('');
+  const [exerciceForceNom, setExerciceForceNom] = useState('');
+  const [exerciceForcePoids, setExerciceForcePoids] = useState('');
+  const [exerciceForceBlocSeries, setExerciceForceBlocSeries] = useState('');
+  const [exerciceForceBlocRepetitions, setExerciceForceBlocRepetitions] = useState('');
+  const [exerciceForceBlocs, setExerciceForceBlocs] = useState<BlocSeriesForce[]>([]);
+  const [exerciceForceReposMinutes, setExerciceForceReposMinutes] = useState('');
+  const [exerciceForceReposSecondes, setExerciceForceReposSecondes] = useState('');
+  const [exerciceForceReglage, setExerciceForceReglage] = useState('');
   const [ajoutEnCours, setAjoutEnCours] = useState(false);
   const [recalcEnCours, setRecalcEnCours] = useState(-1);
   const texteFinalDicteeRef = useRef('');
@@ -473,6 +589,7 @@ export default function HomeScreen() {
           setRepasJour(creerRepasJour());
           setHistorique([]);
           setPesees([]);
+          setEntrainementsForce([]);
           setAlimentsPerso([]);
           setObjectifs(OBJECTIFS_DEFAUT);
           return;
@@ -482,6 +599,7 @@ export default function HomeScreen() {
         const repasSauvegardes = normaliserRepasJour(donnees.repasJour);
         const historiqueSauvegarde = normaliserHistorique(donnees.historique);
         const peseesSauvegardees = normaliserPesees(donnees.pesees);
+        const entrainementsForceSauvegardes = normaliserEntrainementsForce(donnees.entrainementsForce);
         const alimentsPersoSauvegardes = normaliserAlimentsPerso(donnees.alimentsPerso);
         const objectifsSauvegardes = normaliserObjectifs(donnees.objectifs);
 
@@ -495,6 +613,7 @@ export default function HomeScreen() {
             creerJourHistorique(donnees.dateCourante, repasSauvegardes)
           ));
           setPesees(peseesSauvegardees);
+          setEntrainementsForce(entrainementsForceSauvegardes);
           setAlimentsPerso(alimentsPersoSauvegardes);
           setObjectifs(objectifsSauvegardes);
         } else {
@@ -502,6 +621,7 @@ export default function HomeScreen() {
           setRepasJour(repasSauvegardes);
           setHistorique(historiqueSauvegarde);
           setPesees(peseesSauvegardees);
+          setEntrainementsForce(entrainementsForceSauvegardes);
           setAlimentsPerso(alimentsPersoSauvegardes);
           setObjectifs(objectifsSauvegardes);
         }
@@ -527,6 +647,7 @@ export default function HomeScreen() {
       repasJour,
       historique,
       pesees,
+      entrainementsForce,
       alimentsPerso,
       objectifs,
     };
@@ -534,7 +655,7 @@ export default function HomeScreen() {
     AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(donnees)).catch((e) => {
       console.warn('Erreur sauvegarde locale', e);
     });
-  }, [alimentsPerso, dateCourante, historique, objectifs, pesees, repasJour, stockagePret]);
+  }, [alimentsPerso, dateCourante, entrainementsForce, historique, objectifs, pesees, repasJour, stockagePret]);
 
   useEffect(() => {
     if (!stockagePret) return;
@@ -1072,6 +1193,231 @@ export default function HomeScreen() {
     setEtape('objectifs');
   };
 
+  const ouvrirEntrainements = () => {
+    ignorerResultatsDicteeRef.current = true;
+    couperMicro('abort');
+    setEtape('entrainements');
+  };
+
+  const ouvrirForce = () => {
+    ignorerResultatsDicteeRef.current = true;
+    couperMicro('abort');
+    setEtape('force');
+  };
+
+  const ouvrirHiit = () => {
+    ignorerResultatsDicteeRef.current = true;
+    couperMicro('abort');
+    setEtape('hiit');
+  };
+
+  const creerEntrainementForce = () => {
+    const nom = nettoyerTexte(nomNouvelEntrainementForce);
+    if (!nom) {
+      Alert.alert('Nom manquant', 'Donne un nom a ton entrainement, par exemple pecs-epaules.');
+      return;
+    }
+
+    const nouvelEntrainement: EntrainementForce = {
+      id: creerIdLocal('force'),
+      nom,
+      dateCreation: getDateLocale(),
+      exercices: [],
+    };
+
+    setEntrainementsForce((actuels) => [nouvelEntrainement, ...actuels]);
+    setNomNouvelEntrainementForce('');
+    setEntrainementForceActifId(nouvelEntrainement.id);
+    setEtape('detailEntrainementForce');
+  };
+
+  const ouvrirDetailEntrainementForce = (id: string) => {
+    setEntrainementForceActifId(id);
+    setEtape('detailEntrainementForce');
+  };
+
+  const viderFormulaireExerciceForce = () => {
+    setExerciceForceNom('');
+    setExerciceForcePoids('');
+    setExerciceForceBlocSeries('');
+    setExerciceForceBlocRepetitions('');
+    setExerciceForceBlocs([]);
+    setExerciceForceReposMinutes('');
+    setExerciceForceReposSecondes('');
+    setExerciceForceReglage('');
+  };
+
+  const ajouterBlocExerciceForce = () => {
+    const series = nettoyerTexte(exerciceForceBlocSeries);
+    const repetitions = nettoyerTexte(exerciceForceBlocRepetitions);
+
+    if (!series || !repetitions) {
+      Alert.alert('Bloc incomplet', 'Remplis les deux cases, par exemple 5 x 10.');
+      return;
+    }
+
+    setExerciceForceBlocs((actuels) => [
+      ...actuels,
+      { id: creerIdLocal('bloc'), series, repetitions },
+    ]);
+    setExerciceForceBlocSeries('');
+    setExerciceForceBlocRepetitions('');
+  };
+
+  const supprimerBlocFormulaireForce = (blocId: string) => {
+    setExerciceForceBlocs((actuels) => actuels.filter((bloc) => bloc.id !== blocId));
+  };
+
+  const ajouterExerciceForce = () => {
+    const nom = nettoyerTexte(exerciceForceNom);
+    if (!entrainementForceActifId) return;
+
+    if (!nom) {
+      Alert.alert('Exercice manquant', 'Ecris le nom de l exercice, par exemple developpe couche.');
+      return;
+    }
+
+    const blocs = [...exerciceForceBlocs];
+    const seriesEnCours = nettoyerTexte(exerciceForceBlocSeries);
+    const repetitionsEnCours = nettoyerTexte(exerciceForceBlocRepetitions);
+
+    if (seriesEnCours || repetitionsEnCours) {
+      if (!seriesEnCours || !repetitionsEnCours) {
+        Alert.alert('Bloc incomplet', 'Remplis les deux cases, par exemple 5 x 10.');
+        return;
+      }
+
+      blocs.push({
+        id: creerIdLocal('bloc'),
+        series: seriesEnCours,
+        repetitions: repetitionsEnCours,
+      });
+    }
+
+    if (blocs.length === 0) {
+      Alert.alert('Series manquantes', 'Ajoute au moins un bloc, par exemple 5 x 10.');
+      return;
+    }
+
+    const exercice: ExerciceForce = {
+      id: creerIdLocal('exercice'),
+      nom,
+      poids: nettoyerTexte(exerciceForcePoids),
+      blocs,
+      repos: formatReposForce(exerciceForceReposMinutes, exerciceForceReposSecondes),
+      reglage: nettoyerTexte(exerciceForceReglage),
+    };
+
+    setEntrainementsForce((actuels) => actuels.map((entrainement) => (
+      entrainement.id === entrainementForceActifId
+        ? { ...entrainement, exercices: [...entrainement.exercices, exercice] }
+        : entrainement
+    )));
+    viderFormulaireExerciceForce();
+  };
+
+  const supprimerExerciceForce = (exerciceId: string) => {
+    if (!entrainementForceActifId) return;
+
+    setEntrainementsForce((actuels) => actuels.map((entrainement) => (
+      entrainement.id === entrainementForceActifId
+        ? { ...entrainement, exercices: entrainement.exercices.filter((exercice) => exercice.id !== exerciceId) }
+        : entrainement
+    )));
+  };
+
+  const modifierExerciceForce = (exerciceId: string, changements: Partial<ExerciceForce>) => {
+    if (!entrainementForceActifId) return;
+
+    setEntrainementsForce((actuels) => actuels.map((entrainement) => {
+      if (entrainement.id !== entrainementForceActifId) return entrainement;
+
+      return {
+        ...entrainement,
+        exercices: entrainement.exercices.map((exercice) => (
+          exercice.id === exerciceId ? { ...exercice, ...changements } : exercice
+        )),
+      };
+    }));
+  };
+
+  const ajouterBlocExerciceExistant = (exerciceId: string) => {
+    if (!entrainementForceActifId) return;
+
+    setEntrainementsForce((actuels) => actuels.map((entrainement) => {
+      if (entrainement.id !== entrainementForceActifId) return entrainement;
+
+      return {
+        ...entrainement,
+        exercices: entrainement.exercices.map((exercice) => (
+          exercice.id === exerciceId
+            ? {
+              ...exercice,
+              blocs: [
+                ...exercice.blocs,
+                { id: creerIdLocal('bloc'), series: '', repetitions: '' },
+              ],
+            }
+            : exercice
+        )),
+      };
+    }));
+  };
+
+  const modifierBlocExerciceForce = (
+    exerciceId: string,
+    blocId: string,
+    changements: Partial<BlocSeriesForce>
+  ) => {
+    if (!entrainementForceActifId) return;
+
+    setEntrainementsForce((actuels) => actuels.map((entrainement) => {
+      if (entrainement.id !== entrainementForceActifId) return entrainement;
+
+      return {
+        ...entrainement,
+        exercices: entrainement.exercices.map((exercice) => (
+          exercice.id === exerciceId
+            ? {
+              ...exercice,
+              blocs: exercice.blocs.map((bloc) => (
+                bloc.id === blocId ? { ...bloc, ...changements } : bloc
+              )),
+            }
+            : exercice
+        )),
+      };
+    }));
+  };
+
+  const supprimerBlocExerciceExistant = (exerciceId: string, blocId: string) => {
+    if (!entrainementForceActifId) return;
+
+    setEntrainementsForce((actuels) => actuels.map((entrainement) => {
+      if (entrainement.id !== entrainementForceActifId) return entrainement;
+
+      return {
+        ...entrainement,
+        exercices: entrainement.exercices.map((exercice) => (
+          exercice.id === exerciceId
+            ? {
+              ...exercice,
+              blocs: exercice.blocs.filter((bloc) => bloc.id !== blocId),
+            }
+            : exercice
+        )),
+      };
+    }));
+  };
+
+  const supprimerEntrainementForce = (id: string) => {
+    setEntrainementsForce((actuels) => actuels.filter((entrainement) => entrainement.id !== id));
+    if (entrainementForceActifId === id) {
+      setEntrainementForceActifId(null);
+      setEtape('force');
+    }
+  };
+
   const enregistrerPesee = () => {
     const date = normaliserDateSaisie(peseeDate);
     const poids = nombre(peseePoids);
@@ -1281,6 +1627,7 @@ export default function HomeScreen() {
   const alimentsRepasSelectionne = repasSelectionne?.aliments || [];
   const jourHistoriqueSelectionne = historique.find((jour) => jour.date === dateHistoriqueActive);
   const repasHistoriqueSelectionnes = normaliserRepasJour(jourHistoriqueSelectionne?.repas);
+  const entrainementForceActif = entrainementsForce.find((entrainement) => entrainement.id === entrainementForceActifId);
   const totauxJour = calculerTotaux(repasJour.flatMap((repas) => repas.aliments));
   const totauxConfirmation = calculerTotaux(aliments);
   const totauxRepasSelectionne = calculerTotaux(alimentsRepasSelectionne);
@@ -1345,6 +1692,274 @@ export default function HomeScreen() {
         <Text style={styles.title}>Mes Calories</Text>
         <Text style={styles.emptyText}>Chargement...</Text>
       </View>
+    );
+  }
+
+  if (etape === 'entrainements') {
+    return (
+      <ScrollView contentContainerStyle={styles.container}>
+        <Text style={styles.title}>Entrainements</Text>
+        <Text style={styles.mealSubtitle}>Choisis ton type de seance</Text>
+
+        <View style={styles.mealChoiceGrid}>
+          <TouchableOpacity style={styles.mealChoiceButton} onPress={ouvrirForce}>
+            <Text style={styles.mealChoiceText}>Force</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.mealChoiceButton} onPress={ouvrirHiit}>
+            <Text style={styles.mealChoiceText}>HIIT</Text>
+          </TouchableOpacity>
+        </View>
+
+        <TouchableOpacity style={styles.buttonSecondary} onPress={() => setEtape('accueil')}>
+          <Text style={styles.buttonSecondaryText}>Retour</Text>
+        </TouchableOpacity>
+      </ScrollView>
+    );
+  }
+
+  if (etape === 'hiit') {
+    return (
+      <ScrollView contentContainerStyle={styles.container}>
+        <Text style={styles.title}>HIIT</Text>
+        <Text style={styles.emptyText}>On le construira apres la force.</Text>
+        <TouchableOpacity style={styles.buttonSecondary} onPress={() => setEtape('entrainements')}>
+          <Text style={styles.buttonSecondaryText}>Retour</Text>
+        </TouchableOpacity>
+      </ScrollView>
+    );
+  }
+
+  if (etape === 'force') {
+    return (
+      <ScrollView contentContainerStyle={styles.container}>
+        <Text style={styles.title}>Force</Text>
+        <Text style={styles.mealSubtitle}>Cree ou ouvre un entrainement</Text>
+
+        <View style={styles.trainingFormCard}>
+          <Text style={styles.repasTitle}>Nouvel entrainement</Text>
+          <TextInput
+            style={styles.input}
+            value={nomNouvelEntrainementForce}
+            onChangeText={setNomNouvelEntrainementForce}
+            placeholder="Ex: pecs-epaules"
+          />
+          <TouchableOpacity style={styles.button} onPress={creerEntrainementForce}>
+            <Text style={styles.buttonText}>Creer entrainement</Text>
+          </TouchableOpacity>
+        </View>
+
+        <Text style={styles.sectionTitle}>Mes entrainements force</Text>
+        {entrainementsForce.length === 0 ? (
+          <Text style={styles.emptyText}>Aucun entrainement force pour le moment.</Text>
+        ) : (
+          entrainementsForce.map((entrainement) => (
+            <View key={entrainement.id} style={styles.trainingCard}>
+              <View style={styles.repasCardHeader}>
+                <Text style={styles.repasTitle}>{entrainement.nom}</Text>
+                <TouchableOpacity style={styles.btnSupprimer} onPress={() => supprimerEntrainementForce(entrainement.id)}>
+                  <Text style={styles.btnSupprimerText}>X</Text>
+                </TouchableOpacity>
+              </View>
+              <Text style={styles.repasMacros}>{entrainement.exercices.length} exercice(s)</Text>
+              <TouchableOpacity style={styles.trainingOpenButton} onPress={() => ouvrirDetailEntrainementForce(entrainement.id)}>
+                <Text style={styles.trainingOpenButtonText}>Ouvrir</Text>
+              </TouchableOpacity>
+            </View>
+          ))
+        )}
+
+        <TouchableOpacity style={styles.buttonSecondary} onPress={() => setEtape('entrainements')}>
+          <Text style={styles.buttonSecondaryText}>Retour</Text>
+        </TouchableOpacity>
+      </ScrollView>
+    );
+  }
+
+  if (etape === 'detailEntrainementForce') {
+    if (!entrainementForceActif) {
+      return (
+        <ScrollView contentContainerStyle={styles.container}>
+          <Text style={styles.title}>Force</Text>
+          <Text style={styles.emptyText}>Entrainement introuvable.</Text>
+          <TouchableOpacity style={styles.buttonSecondary} onPress={() => setEtape('force')}>
+            <Text style={styles.buttonSecondaryText}>Retour</Text>
+          </TouchableOpacity>
+        </ScrollView>
+      );
+    }
+
+    return (
+      <ScrollView contentContainerStyle={styles.container}>
+        <Text style={styles.title}>{entrainementForceActif.nom}</Text>
+        <Text style={styles.mealSubtitle}>Exercices de force</Text>
+
+        <View style={styles.trainingFormCard}>
+          <Text style={styles.repasTitle}>Ajouter un exercice</Text>
+          <TextInput
+            style={styles.input}
+            value={exerciceForceNom}
+            onChangeText={setExerciceForceNom}
+            placeholder="Nom exercice, ex: developpe couche"
+          />
+          <View style={styles.trainingInputRow}>
+            <TextInput
+              style={styles.trainingFullInput}
+              value={exerciceForcePoids}
+              onChangeText={(valeur) => setExerciceForcePoids(valeur.replace(/[^0-9,\.]/g, ''))}
+              placeholder="Poids kg"
+              keyboardType="decimal-pad"
+            />
+          </View>
+          <Text style={styles.trainingFieldLabel}>Series</Text>
+          <View style={styles.trainingBlockRow}>
+            <TextInput
+              style={styles.trainingBlockInput}
+              value={exerciceForceBlocSeries}
+              onChangeText={(valeur) => setExerciceForceBlocSeries(valeur.replace(/[^0-9]/g, ''))}
+              placeholder="Series"
+              keyboardType="numeric"
+            />
+            <Text style={styles.trainingBlockSeparator}>x</Text>
+            <TextInput
+              style={styles.trainingBlockInput}
+              value={exerciceForceBlocRepetitions}
+              onChangeText={(valeur) => setExerciceForceBlocRepetitions(valeur.replace(/[^0-9]/g, ''))}
+              placeholder="Reps"
+              keyboardType="numeric"
+            />
+            <TouchableOpacity style={styles.trainingMiniButton} onPress={ajouterBlocExerciceForce}>
+              <Text style={styles.trainingMiniButtonText}>+</Text>
+            </TouchableOpacity>
+          </View>
+          {exerciceForceBlocs.map((bloc) => (
+            <View key={bloc.id} style={styles.trainingSavedBlockRow}>
+              <Text style={styles.trainingBlockText}>{bloc.series} x {bloc.repetitions}</Text>
+              <TouchableOpacity style={styles.trainingMiniDeleteButton} onPress={() => supprimerBlocFormulaireForce(bloc.id)}>
+                <Text style={styles.trainingMiniDeleteButtonText}>X</Text>
+              </TouchableOpacity>
+            </View>
+          ))}
+          <Text style={styles.trainingFieldLabel}>Une serie toutes les</Text>
+          <View style={styles.trainingInputRow}>
+            <TextInput
+              style={styles.trainingSmallInput}
+              value={exerciceForceReposMinutes}
+              onChangeText={(valeur) => setExerciceForceReposMinutes(limiterEntierTexte(valeur, 60))}
+              placeholder="Minutes"
+              keyboardType="numeric"
+            />
+            <TextInput
+              style={styles.trainingSmallInput}
+              value={exerciceForceReposSecondes}
+              onChangeText={(valeur) => setExerciceForceReposSecondes(limiterEntierTexte(valeur, 59))}
+              placeholder="Secondes"
+              keyboardType="numeric"
+            />
+          </View>
+          <View style={styles.trainingInputRow}>
+            <TextInput
+              style={styles.trainingFullInput}
+              value={exerciceForceReglage}
+              onChangeText={setExerciceForceReglage}
+              placeholder="Reglage machine"
+            />
+          </View>
+          <TouchableOpacity style={styles.button} onPress={ajouterExerciceForce}>
+            <Text style={styles.buttonText}>Ajouter exercice</Text>
+          </TouchableOpacity>
+        </View>
+
+        <Text style={styles.sectionTitle}>Exercices</Text>
+        {entrainementForceActif.exercices.length === 0 ? (
+          <Text style={styles.emptyText}>Aucun exercice pour cet entrainement.</Text>
+        ) : (
+          entrainementForceActif.exercices.map((exercice) => {
+            const blocs = exercice.blocs || [];
+
+            return (
+              <View key={exercice.id} style={styles.trainingCard}>
+                <View style={styles.repasCardHeader}>
+                  <TextInput
+                    style={styles.trainingExerciseNameInput}
+                    value={exercice.nom}
+                    onChangeText={(valeur) => modifierExerciceForce(exercice.id, { nom: valeur })}
+                    placeholder="Nom exercice"
+                  />
+                  <TouchableOpacity style={styles.btnSupprimer} onPress={() => supprimerExerciceForce(exercice.id)}>
+                    <Text style={styles.btnSupprimerText}>X</Text>
+                  </TouchableOpacity>
+                </View>
+                <View style={styles.trainingInputRow}>
+                  <TextInput
+                    style={styles.trainingSmallInput}
+                    value={exercice.poids}
+                    onChangeText={(valeur) => modifierExerciceForce(exercice.id, { poids: valeur.replace(/[^0-9,\.]/g, '') })}
+                    placeholder="Poids kg"
+                    keyboardType="decimal-pad"
+                  />
+                  <TextInput
+                    style={styles.trainingSmallInput}
+                    value={exercice.repos}
+                    onChangeText={(valeur) => modifierExerciceForce(exercice.id, { repos: valeur })}
+                    placeholder="Une serie toutes les"
+                  />
+                </View>
+                <Text style={styles.trainingFieldLabel}>Series</Text>
+                {blocs.length === 0 ? (
+                  <Text style={styles.repasMacros}>Aucun bloc de series.</Text>
+                ) : (
+                  blocs.map((bloc) => (
+                    <View key={bloc.id} style={styles.trainingBlockRow}>
+                      <TextInput
+                        style={styles.trainingBlockInput}
+                        value={bloc.series}
+                        onChangeText={(valeur) => modifierBlocExerciceForce(
+                          exercice.id,
+                          bloc.id,
+                          { series: valeur.replace(/[^0-9]/g, '') }
+                        )}
+                        placeholder="Series"
+                        keyboardType="numeric"
+                      />
+                      <Text style={styles.trainingBlockSeparator}>x</Text>
+                      <TextInput
+                        style={styles.trainingBlockInput}
+                        value={bloc.repetitions}
+                        onChangeText={(valeur) => modifierBlocExerciceForce(
+                          exercice.id,
+                          bloc.id,
+                          { repetitions: valeur.replace(/[^0-9]/g, '') }
+                        )}
+                        placeholder="Reps"
+                        keyboardType="numeric"
+                      />
+                      <TouchableOpacity style={styles.trainingMiniDeleteButton} onPress={() => supprimerBlocExerciceExistant(exercice.id, bloc.id)}>
+                        <Text style={styles.trainingMiniDeleteButtonText}>X</Text>
+                      </TouchableOpacity>
+                    </View>
+                  ))
+                )}
+                <TouchableOpacity style={styles.trainingOpenButton} onPress={() => ajouterBlocExerciceExistant(exercice.id)}>
+                  <Text style={styles.trainingOpenButtonText}>Ajouter bloc</Text>
+                </TouchableOpacity>
+                <TextInput
+                  style={styles.trainingFullInput}
+                  value={exercice.reglage}
+                  onChangeText={(valeur) => modifierExerciceForce(exercice.id, { reglage: valeur })}
+                  placeholder="Reglage machine"
+                />
+              </View>
+            );
+          })
+        )}
+
+        <TouchableOpacity style={styles.button} onPress={() => setEtape('force')}>
+          <Text style={styles.buttonText}>Terminer</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.buttonSecondary} onPress={() => setEtape('force')}>
+          <Text style={styles.buttonSecondaryText}>Retour</Text>
+        </TouchableOpacity>
+      </ScrollView>
     );
   }
 
@@ -1904,6 +2519,9 @@ export default function HomeScreen() {
       <TouchableOpacity style={styles.buttonSecondary} onPress={ouvrirMesAliments}>
         <Text style={styles.buttonSecondaryText}>Mes aliments</Text>
       </TouchableOpacity>
+      <TouchableOpacity style={styles.buttonSecondary} onPress={ouvrirEntrainements}>
+        <Text style={styles.buttonSecondaryText}>Entrainements</Text>
+      </TouchableOpacity>
 
       <Text style={styles.sectionTitle}>Ajouter un repas</Text>
       <View style={styles.mealChoiceGrid}>
@@ -1965,6 +2583,24 @@ const styles = StyleSheet.create({
   mealChoiceGrid: { width: '100%', flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', marginBottom: 18 },
   mealChoiceButton: { width: '48%', backgroundColor: '#4ECDC4', borderRadius: 10, paddingVertical: 14, paddingHorizontal: 8, alignItems: 'center', marginBottom: 10 },
   mealChoiceText: { color: '#fff', fontSize: 15, fontWeight: 'bold', textAlign: 'center' },
+  trainingFormCard: { width: '100%', backgroundColor: '#f9f9f9', borderRadius: 10, padding: 14, marginBottom: 16 },
+  trainingCard: { width: '100%', backgroundColor: '#f9f9f9', borderRadius: 10, padding: 14, marginBottom: 10 },
+  trainingInputRow: { width: '100%', flexDirection: 'row', justifyContent: 'space-between', marginBottom: 10 },
+  trainingSmallInput: { width: '48%', borderWidth: 1, borderColor: '#ddd', borderRadius: 10, padding: 12, fontSize: 15, backgroundColor: '#fff' },
+  trainingFullInput: { width: '100%', borderWidth: 1, borderColor: '#ddd', borderRadius: 10, padding: 12, fontSize: 15, backgroundColor: '#fff' },
+  trainingBlockRow: { width: '100%', flexDirection: 'row', alignItems: 'center', marginBottom: 10 },
+  trainingBlockInput: { flex: 1, borderWidth: 1, borderColor: '#ddd', borderRadius: 10, padding: 12, fontSize: 15, backgroundColor: '#fff', textAlign: 'center' },
+  trainingBlockSeparator: { width: 28, textAlign: 'center', fontSize: 18, fontWeight: 'bold', color: '#777' },
+  trainingMiniButton: { width: 42, height: 42, borderRadius: 21, backgroundColor: '#4ECDC4', alignItems: 'center', justifyContent: 'center', marginLeft: 8 },
+  trainingMiniButtonText: { color: '#fff', fontSize: 22, fontWeight: 'bold', lineHeight: 24 },
+  trainingMiniDeleteButton: { width: 42, height: 42, borderRadius: 21, backgroundColor: '#FF6B6B', alignItems: 'center', justifyContent: 'center', marginLeft: 8 },
+  trainingMiniDeleteButtonText: { color: '#fff', fontSize: 14, fontWeight: 'bold' },
+  trainingSavedBlockRow: { width: '100%', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: '#fff', borderRadius: 10, paddingVertical: 8, paddingHorizontal: 12, marginBottom: 8 },
+  trainingBlockText: { fontSize: 15, color: '#333', fontWeight: 'bold' },
+  trainingExerciseNameInput: { flex: 1, borderBottomWidth: 1, borderColor: '#ddd', fontSize: 18, fontWeight: 'bold', color: '#222', marginRight: 8 },
+  trainingFieldLabel: { width: '100%', fontSize: 13, color: '#777', fontWeight: 'bold', marginBottom: 6 },
+  trainingOpenButton: { backgroundColor: '#4ECDC4', borderRadius: 10, paddingVertical: 10, alignItems: 'center', marginTop: 8 },
+  trainingOpenButtonText: { color: '#fff', fontSize: 15, fontWeight: 'bold' },
   repasCard: { width: '100%', backgroundColor: '#f9f9f9', borderRadius: 10, padding: 14, marginBottom: 10 },
   repasCardHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 },
   repasTitle: { fontSize: 18, fontWeight: 'bold', color: '#222' },
