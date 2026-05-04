@@ -25,6 +25,11 @@ type Aliment = {
   source?: string;
 };
 
+type AlimentPerso = Aliment & {
+  id: string;
+  derniereUtilisation?: string;
+};
+
 type AlimentParse = {
   nom: string;
   quantite: string;
@@ -46,7 +51,23 @@ type Totaux = {
   lipides: number;
 };
 
-type Etape = 'accueil' | 'saisie' | 'confirmation' | 'detailRepas' | 'historique';
+type ObjectifMode = 'illimite' | 'maximum' | 'minimum' | 'cible';
+
+type ObjectifNutrition = {
+  mode: ObjectifMode;
+  valeur: string;
+};
+
+type ObjectifsNutrition = {
+  calories: ObjectifNutrition;
+  proteines: ObjectifNutrition;
+  glucides: ObjectifNutrition;
+  lipides: ObjectifNutrition;
+};
+
+type ObjectifCle = keyof ObjectifsNutrition;
+
+type Etape = 'accueil' | 'saisie' | 'confirmation' | 'detailRepas' | 'historique' | 'mesAliments' | 'objectifs';
 
 type JourHistorique = {
   date: string;
@@ -57,6 +78,8 @@ type DonneesSauvegardees = {
   dateCourante: string;
   repasJour: Repas[];
   historique: JourHistorique[];
+  alimentsPerso: AlimentPerso[];
+  objectifs: ObjectifsNutrition;
 };
 
 const SPEECH_OPTIONS = { lang: 'fr-FR', interimResults: true, continuous: true };
@@ -68,6 +91,35 @@ const REPAS_OPTIONS: { id: RepasId; nom: string }[] = [
   { id: 'diner', nom: 'Diner' },
   { id: 'collation', nom: 'Collation' },
 ];
+
+const OBJECTIFS_DEFAUT: ObjectifsNutrition = {
+  calories: { mode: 'illimite', valeur: '' },
+  proteines: { mode: 'illimite', valeur: '' },
+  glucides: { mode: 'illimite', valeur: '' },
+  lipides: { mode: 'illimite', valeur: '' },
+};
+
+const OBJECTIF_DEFINITIONS: { cle: ObjectifCle; nom: string; unite: string; pas: number }[] = [
+  { cle: 'calories', nom: 'Calories', unite: 'kcal', pas: 50 },
+  { cle: 'proteines', nom: 'Proteines', unite: 'g', pas: 5 },
+  { cle: 'glucides', nom: 'Glucides', unite: 'g', pas: 10 },
+  { cle: 'lipides', nom: 'Lipides', unite: 'g', pas: 5 },
+];
+
+const MODES_OBJECTIF: { mode: ObjectifMode; label: string }[] = [
+  { mode: 'illimite', label: 'Illimite' },
+  { mode: 'maximum', label: 'Max' },
+  { mode: 'minimum', label: 'Min' },
+  { mode: 'cible', label: 'Cible' },
+];
+
+const COULEURS_OBJECTIF = {
+  neutre: '#FF6B6B',
+  ok: '#2ECC71',
+  alerte: '#FF9F1C',
+  danger: '#FF4D4F',
+  cible: '#7C3AED',
+};
 
 const creerRepasJour = (): Repas[] => REPAS_OPTIONS.map((repas) => ({ ...repas, aliments: [] }));
 
@@ -117,6 +169,113 @@ const creerJourHistorique = (date: string, repas: Repas[]): JourHistorique => ({
 const ajouterJourHistorique = (historique: JourHistorique[], jour: JourHistorique) => {
   if (jourEstVide(jour.repas)) return historique;
   return [jour, ...historique.filter((item) => item.date !== jour.date)].slice(0, 30);
+};
+
+const estObjectifMode = (valeur: unknown): valeur is ObjectifMode => (
+  valeur === 'illimite' || valeur === 'maximum' || valeur === 'minimum' || valeur === 'cible'
+);
+
+const normaliserObjectifs = (objectifs?: Partial<ObjectifsNutrition> | null): ObjectifsNutrition => {
+  const resultat = { ...OBJECTIFS_DEFAUT };
+
+  for (const definition of OBJECTIF_DEFINITIONS) {
+    const sauvegarde = objectifs?.[definition.cle];
+    resultat[definition.cle] = {
+      mode: estObjectifMode(sauvegarde?.mode) ? sauvegarde.mode : 'illimite',
+      valeur: typeof sauvegarde?.valeur === 'string' ? sauvegarde.valeur : '',
+    };
+  }
+
+  return resultat;
+};
+
+const normaliserCleAliment = (valeur: string) => (
+  valeur
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-|-$/g, '')
+);
+
+const getNomAlimentSimple = (aliment: Aliment) => {
+  const nom = aliment._nom || aliment.nom || 'aliment';
+  return nom
+    .replace(/^\d+\s*x\s+/i, '')
+    .replace(/^\d+\s*g\s+/i, '')
+    .replace(/^\d+\s*ml\s+/i, '')
+    .trim() || 'aliment';
+};
+
+const getAlimentPersoId = (aliment: Aliment) => {
+  if (aliment.code_barres) return 'barcode:' + aliment.code_barres;
+  return 'nom:' + normaliserCleAliment(getNomAlimentSimple(aliment));
+};
+
+const normaliserAlimentsPerso = (aliments?: Partial<AlimentPerso>[] | null): AlimentPerso[] => {
+  if (!Array.isArray(aliments)) return [];
+
+  return aliments
+    .filter((aliment) => aliment && typeof aliment === 'object')
+    .map((aliment) => {
+      const enrichi = enrichirProduitScanne(aliment as Aliment);
+      return {
+        ...enrichi,
+        id: typeof aliment.id === 'string' ? aliment.id : getAlimentPersoId(enrichi),
+        derniereUtilisation: typeof aliment.derniereUtilisation === 'string' ? aliment.derniereUtilisation : undefined,
+      };
+    })
+    .slice(0, 100);
+};
+
+const preparerAlimentPerso = (aliment: Aliment): AlimentPerso => {
+  const enrichi = enrichirProduitScanne(aliment);
+  return {
+    ...enrichi,
+    id: getAlimentPersoId(enrichi),
+    derniereUtilisation: new Date().toISOString(),
+  };
+};
+
+const ajouterAlimentsPerso = (actuels: AlimentPerso[], alimentsAAjouter: Aliment[]) => {
+  const nouveaux = [...actuels];
+
+  for (const aliment of alimentsAAjouter) {
+    const alimentPerso = preparerAlimentPerso(aliment);
+    const indexExistant = nouveaux.findIndex((item) => item.id === alimentPerso.id);
+
+    if (indexExistant >= 0) {
+      const existant = nouveaux[indexExistant];
+      nouveaux[indexExistant] = {
+        ...alimentPerso,
+        ...existant,
+        _calories100: existant._calories100 ?? alimentPerso._calories100,
+        _proteines100: existant._proteines100 ?? alimentPerso._proteines100,
+        _glucides100: existant._glucides100 ?? alimentPerso._glucides100,
+        _lipides100: existant._lipides100 ?? alimentPerso._lipides100,
+        _sucres100: existant._sucres100 ?? alimentPerso._sucres100,
+        _fibres100: existant._fibres100 ?? alimentPerso._fibres100,
+        derniereUtilisation: alimentPerso.derniereUtilisation,
+      };
+    } else {
+      nouveaux.unshift(alimentPerso);
+    }
+  }
+
+  return nouveaux.slice(0, 100);
+};
+
+const copierAlimentPerso = (aliment: AlimentPerso): Aliment => {
+  const { id: _id, derniereUtilisation: _derniereUtilisation, ...copie } = aliment;
+  return { ...copie };
+};
+
+const parserProduitScanne = (valeur: string): Aliment => {
+  try {
+    return JSON.parse(valeur) as Aliment;
+  } catch {
+    return JSON.parse(decodeURIComponent(valeur)) as Aliment;
+  }
 };
 
 const nettoyerTexte = (valeur: string) => valeur.trim().replace(/\s+/g, ' ');
@@ -219,6 +378,8 @@ export default function HomeScreen() {
   const [etape, setEtape] = useState<Etape>('accueil');
   const [dateCourante, setDateCourante] = useState(getDateLocale);
   const [historique, setHistorique] = useState<JourHistorique[]>([]);
+  const [alimentsPerso, setAlimentsPerso] = useState<AlimentPerso[]>([]);
+  const [objectifs, setObjectifs] = useState<ObjectifsNutrition>(OBJECTIFS_DEFAUT);
   const [stockagePret, setStockagePret] = useState(false);
   const [nouvelAliment, setNouvelAliment] = useState('');
   const [ajoutEnCours, setAjoutEnCours] = useState(false);
@@ -248,12 +409,16 @@ export default function HomeScreen() {
           setDateCourante(aujourdhui);
           setRepasJour(creerRepasJour());
           setHistorique([]);
+          setAlimentsPerso([]);
+          setObjectifs(OBJECTIFS_DEFAUT);
           return;
         }
 
         const donnees = JSON.parse(brut) as Partial<DonneesSauvegardees>;
         const repasSauvegardes = normaliserRepasJour(donnees.repasJour);
         const historiqueSauvegarde = normaliserHistorique(donnees.historique);
+        const alimentsPersoSauvegardes = normaliserAlimentsPerso(donnees.alimentsPerso);
+        const objectifsSauvegardes = normaliserObjectifs(donnees.objectifs);
 
         if (!actif) return;
 
@@ -264,10 +429,14 @@ export default function HomeScreen() {
             historiqueSauvegarde,
             creerJourHistorique(donnees.dateCourante, repasSauvegardes)
           ));
+          setAlimentsPerso(alimentsPersoSauvegardes);
+          setObjectifs(objectifsSauvegardes);
         } else {
           setDateCourante(aujourdhui);
           setRepasJour(repasSauvegardes);
           setHistorique(historiqueSauvegarde);
+          setAlimentsPerso(alimentsPersoSauvegardes);
+          setObjectifs(objectifsSauvegardes);
         }
       } catch (e) {
         Alert.alert('Erreur sauvegarde', String(e));
@@ -290,12 +459,14 @@ export default function HomeScreen() {
       dateCourante,
       repasJour,
       historique,
+      alimentsPerso,
+      objectifs,
     };
 
     AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(donnees)).catch((e) => {
       console.warn('Erreur sauvegarde locale', e);
     });
-  }, [dateCourante, historique, repasJour, stockagePret]);
+  }, [alimentsPerso, dateCourante, historique, objectifs, repasJour, stockagePret]);
 
   useEffect(() => {
     if (!stockagePret) return;
@@ -327,10 +498,11 @@ export default function HomeScreen() {
   useEffect(() => {
     if (!params.scanned || !params.scanId || dernierScanIdRef.current === params.scanId) return;
 
+    dernierScanIdRef.current = params.scanId;
+
     try {
-      const produitScanne = enrichirProduitScanne(JSON.parse(decodeURIComponent(params.scanned)) as Aliment);
+      const produitScanne = enrichirProduitScanne(parserProduitScanne(params.scanned));
       const repasScan = estRepasId(params.mealId) ? params.mealId : repasActif || 'collation';
-      dernierScanIdRef.current = params.scanId;
       setRepasActif(repasScan);
       ignorerResultatsDicteeRef.current = true;
       couperMicro('abort');
@@ -701,11 +873,219 @@ export default function HomeScreen() {
     router.push({ pathname: '/scan', params: { mealId } });
   };
 
+  const ouvrirMesAliments = () => {
+    ignorerResultatsDicteeRef.current = true;
+    couperMicro('abort');
+    setEtape('mesAliments');
+  };
+
+  const ouvrirObjectifs = () => {
+    ignorerResultatsDicteeRef.current = true;
+    couperMicro('abort');
+    setEtape('objectifs');
+  };
+
+  const getDefinitionObjectif = (cle: ObjectifCle) => (
+    OBJECTIF_DEFINITIONS.find((definition) => definition.cle === cle) || OBJECTIF_DEFINITIONS[0]
+  );
+
+  const formatValeurObjectif = (cle: ObjectifCle, valeur: number) => {
+    if (cle === 'calories') return String(Math.round(valeur));
+    return formatMacro(valeur);
+  };
+
+  const getObjectifInfo = (cle: ObjectifCle, valeur: number) => {
+    const definition = getDefinitionObjectif(cle);
+    const objectif = objectifs[cle];
+    const limite = nombre(objectif.valeur);
+    const valeurTexte = formatValeurObjectif(cle, valeur);
+
+    if (objectif.mode === 'illimite' || limite <= 0) {
+      return {
+        couleur: COULEURS_OBJECTIF.neutre,
+        texte: `${valeurTexte}${definition.unite}`,
+        sousTexte: cle === 'calories' ? 'calories aujourdhui' : definition.nom,
+        detail: 'Illimite',
+        pourcentage: 0,
+        afficherBarre: false,
+      };
+    }
+
+    const ratio = valeur / limite;
+    const ecart = Math.abs(limite - valeur);
+    const ecartTexte = formatValeurObjectif(cle, ecart);
+    let couleur = COULEURS_OBJECTIF.neutre;
+    let detail = '';
+
+    if (objectif.mode === 'maximum') {
+      if (ratio > 1) couleur = COULEURS_OBJECTIF.danger;
+      else if (ratio >= 0.9) couleur = COULEURS_OBJECTIF.alerte;
+      else couleur = COULEURS_OBJECTIF.ok;
+      detail = ratio > 1 ? `depasse de ${ecartTexte}${definition.unite}` : `reste ${ecartTexte}${definition.unite}`;
+    }
+
+    if (objectif.mode === 'minimum') {
+      if (ratio >= 1) couleur = COULEURS_OBJECTIF.ok;
+      else if (ratio >= 0.9) couleur = COULEURS_OBJECTIF.alerte;
+      else couleur = COULEURS_OBJECTIF.danger;
+      detail = ratio >= 1 ? 'minimum atteint' : `encore ${ecartTexte}${definition.unite}`;
+    }
+
+    if (objectif.mode === 'cible') {
+      if (ratio >= 0.9 && ratio <= 1.1) couleur = COULEURS_OBJECTIF.ok;
+      else if (ratio < 0.9) couleur = COULEURS_OBJECTIF.cible;
+      else if (ratio <= 1.2) couleur = COULEURS_OBJECTIF.alerte;
+      else couleur = COULEURS_OBJECTIF.danger;
+      detail = ratio >= 0.9 && ratio <= 1.1
+        ? 'zone cible'
+        : (valeur < limite ? `encore ${ecartTexte}${definition.unite}` : `au-dessus de ${ecartTexte}${definition.unite}`);
+    }
+
+    return {
+      couleur,
+      texte: `${valeurTexte} / ${formatValeurObjectif(cle, limite)}${definition.unite}`,
+      sousTexte: objectif.mode === 'maximum' ? 'maximum' : (objectif.mode === 'minimum' ? 'minimum' : 'cible'),
+      detail,
+      pourcentage: Math.min(100, Math.max(0, ratio * 100)),
+      afficherBarre: true,
+    };
+  };
+
+  const modifierModeObjectif = (cle: ObjectifCle, mode: ObjectifMode) => {
+    setObjectifs((actuels) => ({
+      ...actuels,
+      [cle]: {
+        ...actuels[cle],
+        mode,
+        valeur: mode === 'illimite' ? '' : actuels[cle].valeur,
+      },
+    }));
+  };
+
+  const modifierValeurObjectif = (cle: ObjectifCle, valeur: string) => {
+    setObjectifs((actuels) => ({
+      ...actuels,
+      [cle]: {
+        ...actuels[cle],
+        valeur: valeur.replace(/[^0-9]/g, ''),
+      },
+    }));
+  };
+
+  const ajusterValeurObjectif = (cle: ObjectifCle, delta: number) => {
+    const definition = getDefinitionObjectif(cle);
+    setObjectifs((actuels) => {
+      const valeurActuelle = nombre(actuels[cle].valeur);
+      const prochaineValeur = Math.max(0, valeurActuelle + delta * definition.pas);
+      return {
+        ...actuels,
+        [cle]: {
+          ...actuels[cle],
+          mode: actuels[cle].mode === 'illimite' ? 'cible' : actuels[cle].mode,
+          valeur: prochaineValeur ? String(prochaineValeur) : '',
+        },
+      };
+    });
+  };
+
+  const retourDepuisMesAliments = () => {
+    if (aliments.length > 0) {
+      setEtape('confirmation');
+      return;
+    }
+
+    setEtape(repasActif ? 'saisie' : 'accueil');
+  };
+
+  const modifierAlimentPerso = (index: number, modifier: (aliment: AlimentPerso) => AlimentPerso) => {
+    setAlimentsPerso((actuels) => actuels.map((aliment, i) => (
+      i === index ? modifier(aliment) : aliment
+    )));
+  };
+
+  const modifierNomAlimentPerso = (index: number, valeur: string) => {
+    modifierAlimentPerso(index, (aliment) => {
+      const parsed = parseAliment(aliment);
+      return {
+        ...aliment,
+        nom: reconstruireNom(valeur, parsed.quantite, parsed.unite),
+        _nom: valeur,
+        _quantite: parsed.quantite,
+        _unite: parsed.unite,
+      };
+    });
+  };
+
+  const modifierQuantiteAlimentPerso = (index: number, valeur: string) => {
+    modifierAlimentPerso(index, (aliment) => {
+      const parsed = parseAliment(aliment);
+      return {
+        ...aliment,
+        nom: reconstruireNom(parsed.nom, valeur, parsed.unite),
+        _nom: parsed.nom,
+        _quantite: valeur,
+        _unite: parsed.unite,
+      };
+    });
+  };
+
+  const recalculerAlimentPerso = (index: number) => {
+    const aliment = alimentsPerso[index];
+    if (!aliment) return;
+
+    const parsed = parseAliment(aliment);
+    const alimentRecalcule = recalculerProduitScanne(enrichirProduitScanne(aliment), parsed);
+    setAlimentsPerso((actuels) => actuels.map((item, i) => (
+      i === index
+        ? { ...alimentRecalcule, id: aliment.id, derniereUtilisation: new Date().toISOString() }
+        : item
+    )));
+  };
+
+  const supprimerAlimentPerso = (index: number) => {
+    setAlimentsPerso((actuels) => actuels.filter((_, i) => i !== index));
+  };
+
+  const ajouterAlimentPersoAuRepas = (index: number) => {
+    if (!repasActif) {
+      Alert.alert('Choisis un repas', 'Selectionne d abord petit dejeuner, dejeuner, diner ou collation.');
+      return;
+    }
+
+    const aliment = alimentsPerso[index];
+    if (!aliment) return;
+
+    setAliments((actuels) => [...actuels, copierAlimentPerso(aliment)]);
+    setAlimentsPerso((actuels) => actuels.map((item, i) => (
+      i === index ? { ...item, derniereUtilisation: new Date().toISOString() } : item
+    )));
+    setEtape('confirmation');
+  };
+
   const repasSelectionne = repasJour.find((repas) => repas.id === repasActif);
   const alimentsRepasSelectionne = repasSelectionne?.aliments || [];
   const totauxJour = calculerTotaux(repasJour.flatMap((repas) => repas.aliments));
   const totauxConfirmation = calculerTotaux(aliments);
   const totauxRepasSelectionne = calculerTotaux(alimentsRepasSelectionne);
+  const objectifCalories = getObjectifInfo('calories', totauxJour.calories);
+
+  const renderObjectifMacro = (cle: ObjectifCle, valeur: number) => {
+    const info = getObjectifInfo(cle, valeur);
+    const definition = getDefinitionObjectif(cle);
+
+    return (
+      <View style={styles.macroItem}>
+        <Text style={[styles.macroValue, { color: info.couleur }]}>{formatValeurObjectif(cle, valeur)}{definition.unite}</Text>
+        <Text style={styles.macroLabel}>{definition.nom}</Text>
+        <Text style={styles.goalSmallText}>{info.detail}</Text>
+        {info.afficherBarre ? (
+          <View style={styles.goalBarTrack}>
+            <View style={[styles.goalBarFill, { width: `${info.pourcentage}%`, backgroundColor: info.couleur }]} />
+          </View>
+        ) : null}
+      </View>
+    );
+  };
 
   const confirmer = () => {
     if (!repasActif) {
@@ -718,6 +1098,7 @@ export default function HomeScreen() {
         ? { ...repas, aliments: [...repas.aliments, ...aliments] }
         : repas
     )));
+    setAlimentsPerso((actuels) => ajouterAlimentsPerso(actuels, aliments.filter(estProduitScanne)));
     setEtape('accueil');
     setTexte('');
     texteFinalDicteeRef.current = '';
@@ -744,6 +1125,75 @@ export default function HomeScreen() {
         <Text style={styles.title}>Mes Calories</Text>
         <Text style={styles.emptyText}>Chargement...</Text>
       </View>
+    );
+  }
+
+  if (etape === 'objectifs') {
+    return (
+      <ScrollView contentContainerStyle={styles.container}>
+        <Text style={styles.title}>Objectifs</Text>
+        <Text style={styles.mealSubtitle}>Illimite, maximum, minimum ou cible</Text>
+
+        {OBJECTIF_DEFINITIONS.map((definition) => {
+          const objectif = objectifs[definition.cle];
+          return (
+            <View key={definition.cle} style={styles.goalCard}>
+              <View style={styles.repasCardHeader}>
+                <Text style={styles.repasTitle}>{definition.nom}</Text>
+                <Text style={styles.goalModeLabel}>{objectif.mode}</Text>
+              </View>
+
+              <View style={styles.goalModeRow}>
+                {MODES_OBJECTIF.map((mode) => (
+                  <TouchableOpacity
+                    key={mode.mode}
+                    style={[
+                      styles.goalModeButton,
+                      objectif.mode === mode.mode ? styles.goalModeButtonActive : null,
+                    ]}
+                    onPress={() => modifierModeObjectif(definition.cle, mode.mode)}
+                  >
+                    <Text style={[
+                      styles.goalModeText,
+                      objectif.mode === mode.mode ? styles.goalModeTextActive : null,
+                    ]}>
+                      {mode.label}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+
+              {objectif.mode !== 'illimite' ? (
+                <View style={styles.goalInputRow}>
+                  <TouchableOpacity style={styles.goalStepButton} onPress={() => ajusterValeurObjectif(definition.cle, -1)}>
+                    <Text style={styles.goalStepText}>-</Text>
+                  </TouchableOpacity>
+                  <TextInput
+                    style={styles.goalInput}
+                    value={objectif.valeur}
+                    onChangeText={(valeur) => modifierValeurObjectif(definition.cle, valeur)}
+                    keyboardType="numeric"
+                    placeholder={'0 ' + definition.unite}
+                  />
+                  <TouchableOpacity style={styles.goalStepButton} onPress={() => ajusterValeurObjectif(definition.cle, 1)}>
+                    <Text style={styles.goalStepText}>+</Text>
+                  </TouchableOpacity>
+                </View>
+              ) : (
+                <Text style={styles.goalHelpText}>Pas de limite ni de cible pour cet indicateur.</Text>
+              )}
+
+              {objectif.mode === 'maximum' ? <Text style={styles.goalHelpText}>Vert sous 90%, orange proche du maximum, rouge si depasse.</Text> : null}
+              {objectif.mode === 'minimum' ? <Text style={styles.goalHelpText}>Rouge sous 90%, orange proche du minimum, vert quand il est atteint.</Text> : null}
+              {objectif.mode === 'cible' ? <Text style={styles.goalHelpText}>Violet sous 90%, vert autour de la cible, orange ou rouge si trop haut.</Text> : null}
+            </View>
+          );
+        })}
+
+        <TouchableOpacity style={styles.buttonSecondary} onPress={() => setEtape('accueil')}>
+          <Text style={styles.buttonSecondaryText}>Retour</Text>
+        </TouchableOpacity>
+      </ScrollView>
     );
   }
 
@@ -787,6 +1237,70 @@ export default function HomeScreen() {
     );
   }
 
+  if (etape === 'mesAliments') {
+    return (
+      <ScrollView contentContainerStyle={styles.container}>
+        <Text style={styles.title}>Mes aliments</Text>
+        <Text style={styles.mealSubtitle}>{repasActif ? 'Ajout dans ' + nomRepasActif : 'Aliments enregistres'}</Text>
+
+        {alimentsPerso.length === 0 ? (
+          <Text style={styles.emptyText}>Aucun aliment enregistre pour le moment.</Text>
+        ) : (
+          <>
+            <View style={styles.headerRow}>
+              <Text style={[styles.headerText, { flex: 2 }]}>Aliment</Text>
+              <Text style={[styles.headerText, { flex: 1, textAlign: 'center' }]}>Quantite</Text>
+              <Text style={[styles.headerText, { flex: 1, textAlign: 'right' }]}>Calories</Text>
+              <View style={{ width: 116 }} />
+            </View>
+
+            {alimentsPerso.map((aliment, index) => {
+              const parsed = parseAliment(aliment);
+              return (
+                <View key={aliment.id} style={styles.alimentCard}>
+                  <View style={styles.alimentRow}>
+                    <TextInput
+                      style={styles.colNom}
+                      value={parsed.nom}
+                      onChangeText={(v) => modifierNomAlimentPerso(index, v)}
+                    />
+                    <TextInput
+                      style={styles.colQuantite}
+                      value={formatQuantite(parsed.quantite, parsed.unite)}
+                      onChangeText={(v) => modifierQuantiteAlimentPerso(index, v.replace(/[^0-9]/g, ''))}
+                      keyboardType="numeric"
+                    />
+                    <Text style={styles.colCal}>{aliment.calories} kcal</Text>
+                    <View style={styles.alimentBtns}>
+                      <TouchableOpacity onPress={() => recalculerAlimentPerso(index)} style={styles.btnRecalc}>
+                        <Text style={styles.btnRecalcText}>OK</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity onPress={() => ajouterAlimentPersoAuRepas(index)} style={styles.btnUtiliser}>
+                        <Text style={styles.btnUtiliserText}>+</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity onPress={() => supprimerAlimentPerso(index)} style={styles.btnSupprimer}>
+                        <Text style={styles.btnSupprimerText}>X</Text>
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                  <View style={styles.macroLine}>
+                    <Text style={styles.macroLineText}>P {formatMacro(aliment.proteines)}g</Text>
+                    <Text style={styles.macroLineText}>G {formatMacro(aliment.glucides)}g</Text>
+                    <Text style={styles.macroLineText}>L {formatMacro(aliment.lipides)}g</Text>
+                  </View>
+                </View>
+              );
+            })}
+          </>
+        )}
+
+        <TouchableOpacity style={styles.buttonSecondary} onPress={retourDepuisMesAliments}>
+          <Text style={styles.buttonSecondaryText}>Retour</Text>
+        </TouchableOpacity>
+      </ScrollView>
+    );
+  }
+
   if (etape === 'saisie') {
     return (
       <View style={styles.container}>
@@ -801,6 +1315,9 @@ export default function HomeScreen() {
         </TouchableOpacity>
         <TouchableOpacity style={styles.buttonScanSpacing} onPress={scannerProduitRepas}>
           <Text style={styles.buttonText}>Scanner un produit</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.buttonSecondary} onPress={ouvrirMesAliments}>
+          <Text style={styles.buttonSecondaryText}>Mes aliments</Text>
         </TouchableOpacity>
         <TouchableOpacity style={styles.buttonSecondary} onPress={() => setEtape('accueil')}>
           <Text style={styles.buttonSecondaryText}>Retour</Text>
@@ -966,6 +1483,9 @@ export default function HomeScreen() {
         <TouchableOpacity style={styles.buttonScan} onPress={scannerAutreProduit}>
           <Text style={styles.buttonText}>Scanner un autre produit</Text>
         </TouchableOpacity>
+        <TouchableOpacity style={styles.buttonSecondary} onPress={ouvrirMesAliments}>
+          <Text style={styles.buttonSecondaryText}>Mes aliments</Text>
+        </TouchableOpacity>
 
         <TouchableOpacity style={styles.button} onPress={confirmer}>
           <Text style={styles.buttonText}>Confirmer</Text>
@@ -980,25 +1500,28 @@ export default function HomeScreen() {
   return (
     <ScrollView contentContainerStyle={styles.container}>
       <Text style={styles.title}>Mes Calories</Text>
-      <Text style={styles.calories}>{totauxJour.calories}</Text>
-      <Text style={styles.subtitle}>calories aujourdhui</Text>
+      <Text style={[styles.calories, { color: objectifCalories.couleur }]}>{totauxJour.calories}</Text>
+      <Text style={styles.subtitle}>{objectifCalories.sousTexte}</Text>
+      <Text style={styles.goalDetailText}>{objectifCalories.detail}</Text>
+      {objectifCalories.afficherBarre ? (
+        <View style={styles.calorieGoalBarTrack}>
+          <View style={[styles.goalBarFill, { width: `${objectifCalories.pourcentage}%`, backgroundColor: objectifCalories.couleur }]} />
+        </View>
+      ) : null}
       <Text style={styles.dateText}>{formatDateHistorique(dateCourante)}</Text>
       <View style={styles.macroSummary}>
-        <View style={styles.macroItem}>
-          <Text style={styles.macroValue}>{formatMacro(totauxJour.proteines)}g</Text>
-          <Text style={styles.macroLabel}>Proteines</Text>
-        </View>
-        <View style={styles.macroItem}>
-          <Text style={styles.macroValue}>{formatMacro(totauxJour.glucides)}g</Text>
-          <Text style={styles.macroLabel}>Glucides</Text>
-        </View>
-        <View style={styles.macroItem}>
-          <Text style={styles.macroValue}>{formatMacro(totauxJour.lipides)}g</Text>
-          <Text style={styles.macroLabel}>Lipides</Text>
-        </View>
+        {renderObjectifMacro('proteines', totauxJour.proteines)}
+        {renderObjectifMacro('glucides', totauxJour.glucides)}
+        {renderObjectifMacro('lipides', totauxJour.lipides)}
       </View>
+      <TouchableOpacity style={styles.buttonSecondary} onPress={ouvrirObjectifs}>
+        <Text style={styles.buttonSecondaryText}>Objectifs</Text>
+      </TouchableOpacity>
       <TouchableOpacity style={styles.buttonSecondary} onPress={() => setEtape('historique')}>
         <Text style={styles.buttonSecondaryText}>Historique</Text>
+      </TouchableOpacity>
+      <TouchableOpacity style={styles.buttonSecondary} onPress={ouvrirMesAliments}>
+        <Text style={styles.buttonSecondaryText}>Mes aliments</Text>
       </TouchableOpacity>
 
       <Text style={styles.sectionTitle}>Ajouter un repas</Text>
@@ -1037,6 +1560,7 @@ const styles = StyleSheet.create({
   calories: { fontSize: 80, fontWeight: 'bold', color: '#FF6B6B' },
   caloriesSmall: { fontSize: 54, fontWeight: 'bold', color: '#FF6B6B' },
   subtitle: { fontSize: 18, color: '#999', marginBottom: 16 },
+  goalDetailText: { fontSize: 13, color: '#777', marginTop: -10, marginBottom: 10, fontWeight: 'bold' },
   dateText: { fontSize: 14, color: '#aaa', marginTop: -8, marginBottom: 12 },
   mealSubtitle: { fontSize: 18, color: '#777', marginTop: -12, marginBottom: 14, fontWeight: 'bold' },
   sectionTitle: { width: '100%', fontSize: 18, fontWeight: 'bold', color: '#333', marginBottom: 10, marginTop: 4 },
@@ -1044,6 +1568,10 @@ const styles = StyleSheet.create({
   macroItem: { flex: 1, alignItems: 'center' },
   macroValue: { fontSize: 18, fontWeight: 'bold', color: '#FF6B6B' },
   macroLabel: { fontSize: 12, color: '#999', marginTop: 2 },
+  goalSmallText: { fontSize: 10, color: '#777', marginTop: 3, minHeight: 14, textAlign: 'center' },
+  goalBarTrack: { width: '82%', height: 5, borderRadius: 3, backgroundColor: '#e8e8e8', overflow: 'hidden', marginTop: 5 },
+  calorieGoalBarTrack: { width: '100%', height: 8, borderRadius: 4, backgroundColor: '#e8e8e8', overflow: 'hidden', marginBottom: 16 },
+  goalBarFill: { height: '100%', borderRadius: 4 },
   input: { width: '100%', borderWidth: 1, borderColor: '#ddd', borderRadius: 10, padding: 15, fontSize: 16, marginBottom: 15 },
   button: { backgroundColor: '#FF6B6B', paddingHorizontal: 30, paddingVertical: 15, borderRadius: 30, marginBottom: 15, width: '100%', alignItems: 'center' },
   buttonScan: { backgroundColor: '#4ECDC4', paddingHorizontal: 30, paddingVertical: 15, borderRadius: 30, marginBottom: 15, width: '100%', alignItems: 'center' },
@@ -1063,6 +1591,18 @@ const styles = StyleSheet.create({
   repasMacros: { fontSize: 13, color: '#777', marginBottom: 6 },
   repasFoods: { fontSize: 14, color: '#333' },
   repasFoodsEmpty: { fontSize: 14, color: '#aaa', fontStyle: 'italic' },
+  goalCard: { width: '100%', backgroundColor: '#f9f9f9', borderRadius: 10, padding: 14, marginBottom: 12 },
+  goalModeLabel: { fontSize: 13, color: '#777', fontWeight: 'bold' },
+  goalModeRow: { flexDirection: 'row', width: '100%', marginTop: 8, marginBottom: 10 },
+  goalModeButton: { flex: 1, borderWidth: 1, borderColor: '#ddd', borderRadius: 8, paddingVertical: 9, alignItems: 'center', marginRight: 6, backgroundColor: '#fff' },
+  goalModeButtonActive: { backgroundColor: '#4ECDC4', borderColor: '#4ECDC4' },
+  goalModeText: { fontSize: 12, color: '#555', fontWeight: 'bold' },
+  goalModeTextActive: { color: '#fff' },
+  goalInputRow: { flexDirection: 'row', alignItems: 'center', width: '100%', marginBottom: 8 },
+  goalInput: { flex: 1, borderWidth: 1, borderColor: '#ddd', borderRadius: 10, padding: 12, fontSize: 18, textAlign: 'center', backgroundColor: '#fff', marginHorizontal: 8 },
+  goalStepButton: { width: 42, height: 42, borderRadius: 21, backgroundColor: '#4ECDC4', alignItems: 'center', justifyContent: 'center' },
+  goalStepText: { color: '#fff', fontSize: 24, fontWeight: 'bold', lineHeight: 26 },
+  goalHelpText: { fontSize: 12, color: '#777', lineHeight: 16 },
   historyCard: { width: '100%', backgroundColor: '#f9f9f9', borderRadius: 10, padding: 14, marginBottom: 12 },
   historyMealBlock: { borderTopWidth: 1, borderTopColor: '#e8e8e8', paddingTop: 8, marginTop: 8 },
   historyMealTitle: { fontSize: 14, fontWeight: 'bold', color: '#333', marginBottom: 4 },
@@ -1085,6 +1625,8 @@ const styles = StyleSheet.create({
   alimentBtns: { flexDirection: 'row' },
   btnRecalc: { backgroundColor: '#4ECDC4', borderRadius: 15, width: 32, height: 32, alignItems: 'center', justifyContent: 'center', marginRight: 4 },
   btnRecalcText: { color: '#fff', fontSize: 11, fontWeight: 'bold' },
+  btnUtiliser: { backgroundColor: '#333', borderRadius: 15, width: 32, height: 32, alignItems: 'center', justifyContent: 'center', marginRight: 4 },
+  btnUtiliserText: { color: '#fff', fontSize: 20, fontWeight: 'bold', lineHeight: 22 },
   btnSupprimer: { backgroundColor: '#FF6B6B', borderRadius: 15, width: 32, height: 32, alignItems: 'center', justifyContent: 'center' },
   btnSupprimerText: { color: '#fff', fontWeight: 'bold' },
   ajoutRow: { flexDirection: 'row', width: '100%', marginBottom: 15, alignItems: 'center', marginTop: 10 },

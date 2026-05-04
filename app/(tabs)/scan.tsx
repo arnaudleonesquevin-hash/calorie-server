@@ -34,7 +34,7 @@ export default function ScanScreen() {
       router.replace({
         pathname: '/',
         params: {
-          scanned: encodeURIComponent(JSON.stringify(produit)),
+          scanned: JSON.stringify(produit),
           scanId: String(Date.now()),
           mealId: params.mealId || '',
         },
