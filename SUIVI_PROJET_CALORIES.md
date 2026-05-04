@@ -1,9 +1,9 @@
 # Suivi de Projet - Application Calories & Macros
 
 ## Derniere mise a jour
-- Date : 3 mai 2026
-- Session : 11
-- Etat : code pousse avec repas, scan multiple, defauts apero, sauvegarde locale et historique. Nouvelle APK Android a reconstruire avant de tester AsyncStorage.
+- Date : 4 mai 2026
+- Session : 12
+- Etat : nouvelle APK Android installee, sauvegarde locale testee, objectifs nutrition ajoutes, aliments personnels ajoutes, historique rendu modifiable, pesees libres ajoutees. Derniere correction locale : separer clairement les pesees de l'historique repas.
 
 ---
 
@@ -24,6 +24,7 @@ Application mobile de suivi nutritionnel :
 - Dictee vocale pour saisir un repas.
 - Journal alimentaire jour par jour.
 - Historique des repas.
+- Pesees libres pour suivre le poids dans le temps.
 - Scan code-barres avec Open Food Facts, ajoute et a tester sur produits reels.
 
 ---
@@ -91,6 +92,13 @@ Flux repas / sauvegarde locale :
 5. Quand la date change, l'ancienne journee est archivee et la nouvelle journee repart a zero.
 6. L'ecran Historique affiche les anciennes journees avec calories, macros et aliments.
 
+Flux poids / pesees :
+1. L'utilisateur va dans Historique.
+2. Il ajoute une pesee seulement quand il veut.
+3. La date est libre : aujourd'hui ou une ancienne date.
+4. La pesee est stockee a part des repas, dans `pesees`.
+5. Objectif futur : utiliser ces donnees pour faire des graphiques de poids.
+
 ---
 
 ## Ce qui fonctionne
@@ -116,6 +124,11 @@ Flux repas / sauvegarde locale :
 - Dans un repas deja enregistre, on peut modifier un aliment, recalculer avec OK ou supprimer avec X.
 - Sauvegarde locale ajoutee avec AsyncStorage.
 - Historique simple ajoute : les journees precedentes sont archivees localement.
+- Historique rendu modifiable : les aliments d'une ancienne journee peuvent etre modifies, recalcules ou supprimes.
+- Pesees libres ajoutees : date + poids en kg, sans obligation quotidienne.
+- Les pesees sont separees des journees repas pour eviter une fausse journee a 0 kcal.
+- Objectifs nutrition ajoutes : illimite, maximum, minimum ou cible pour calories/proteines/glucides/lipides.
+- Aliments personnels ajoutes : un produit scanne peut etre reutilise sans le rescanner.
 - Remise a zero automatique prevue au changement de date.
 - APK Android construite via GitHub Actions quand Expo/EAS bloque au telechargement.
 - Railway connecte a GitHub pour deploiement automatique.
@@ -530,6 +543,95 @@ The <CameraView> component does not support children.
 - Comme AsyncStorage est un module natif, il faut reconstruire une APK avant de tester cette partie sur le Samsung.
 - Prochaine reprise : commencer directement par le build Android.
 
+### Session 12 - 4 mai 2026
+
+#### 1. Reconstruction et installation Android
+- Nouvelle APK Android reconstruite apres ajout d'AsyncStorage.
+- Installation initiale bloquee par Android avec `Application non installee`.
+- Solution : desinstaller l'ancienne CalorieApp du Samsung puis installer la nouvelle APK.
+- Installation reussie ensuite.
+- AsyncStorage fonctionne dans le nouveau build.
+
+#### 2. Sauvegarde locale et historique testes
+- Les repas restent enregistres localement sur le telephone.
+- L'app peut recharger les repas apres fermeture/reouverture.
+- Le principe de remise a zero au changement de date est conserve.
+- L'historique de repas existe et peut afficher les anciennes journees archivees.
+
+#### 3. Aliments personnels
+- Ajout de `Mes aliments`.
+- Un produit scanne peut etre sauvegarde comme aliment personnel.
+- L'utilisateur peut le reutiliser sans rescanner.
+- L'aliment garde une portion de base modifiable.
+- On peut modifier nom/quantite, recalculer et supprimer un aliment personnel.
+- Correction du probleme de scan `URIError: Malformed decodeURI input`.
+
+#### 4. Objectifs nutrition
+- Ajout d'un ecran `Objectifs`.
+- Pour calories, proteines, glucides et lipides, l'utilisateur peut choisir :
+  - Illimite.
+  - Maximum.
+  - Minimum.
+  - Cible.
+- Ajout de couleurs selon l'avancement :
+  - maximum : vert sous 90%, orange proche, rouge si depasse.
+  - minimum : rouge trop bas, orange proche, vert une fois atteint.
+  - cible : violet sous 90%, vert autour de la cible, orange/rouge si trop haut.
+- Objectifs sauvegardes localement.
+
+#### 5. Historique modifiable
+- Les anciennes journees de repas peuvent etre ouvertes.
+- Dans une ancienne journee, les aliments peuvent etre :
+  - modifies.
+  - recalcules avec `OK`.
+  - supprimes avec `X`.
+- Les totaux calories/macros de la journee historique se recalculent apres modification.
+- Limite actuelle : pas encore d'ajout direct d'un nouvel aliment dans une ancienne journee. A voir plus tard si necessaire.
+
+#### 6. Pesees libres
+- Ajout d'une fonction pesee dans l'ecran `Historique`.
+- La pesee n'est pas obligatoire et n'est pas quotidienne.
+- L'utilisateur peut ajouter une pesee seulement quand il veut.
+- La date est libre : aujourd'hui ou ancienne date, par exemple `02/05/2026`.
+- Format stocke : date + poids en kg.
+- Les pesees sont sauvegardees localement dans `pesees`, separement des repas.
+- Objectif futur : utiliser ces donnees pour afficher des graphiques d'evolution du poids.
+
+#### 7. Correction affichage pesees / repas
+- Probleme observe : une pesee seule pouvait apparaitre comme une journee a `0 kcal`, ce qui donnait l'impression que le poids etait traite comme un aliment.
+- Correction locale :
+  - section `Mes pesees` separee.
+  - section `Journees repas` separee.
+  - une pesee seule ne cree plus une fausse carte repas a 0 kcal.
+
+#### 8. Tests realises
+- TypeScript OK :
+```powershell
+npx tsc --noEmit
+```
+- Lint Expo OK :
+```powershell
+npx expo lint
+```
+
+#### 9. Commits/push realises pendant la session
+- `make history editable and add weigh ins` pousse et deploye sur Railway.
+- Correction locale restante a pousser : separation visuelle entre `Mes pesees` et `Journees repas`.
+- Le fichier `SUIVI_PROJET_CALORIES.md` a ete mis a jour localement pour cette session.
+
+#### 10. Etat en fin de session 12
+- L'app mobile a maintenant :
+  - repas par jour.
+  - historique local.
+  - historique modifiable.
+  - aliments personnels.
+  - objectifs calories/macros.
+  - pesees libres.
+- A la reprise :
+  - faire un reload Expo pour tester la derniere correction.
+  - pousser `app/(tabs)/index.tsx` et `SUIVI_PROJET_CALORIES.md`.
+  - tester que les pesees apparaissent bien dans `Mes pesees` et pas comme repas a 0 kcal.
+
 ---
 
 ## Valeurs par defaut actuelles
@@ -702,25 +804,29 @@ npx tsc --noEmit
 
 ## Prochains objectifs court terme
 
-### Priorite 1 - Reconstruire l'APK Android
-- Faire le build Android parce que `AsyncStorage` est un module natif.
-- Installer la nouvelle APK sur le Samsung.
-- Si le telechargement Expo bloque encore, utiliser GitHub Actions comme contournement.
-- Relancer ensuite Expo avec cache vide :
+### Priorite 1 - Pousser la derniere correction locale
+- Fichiers modifies localement :
+  - `app/(tabs)/index.tsx`
+  - `SUIVI_PROJET_CALORIES.md`
+- Objectif : garder la separation `Mes pesees` / `Journees repas`.
+- Commandes :
 ```powershell
 cd C:\Users\arnau\CalorieApp
-npx expo start --dev-client -c
+git status
+git add "app/(tabs)/index.tsx" SUIVI_PROJET_CALORIES.md
+git commit -m "separate weigh ins from meal history"
+git push
 ```
 
-### Priorite 2 - Tester sauvegarde locale et historique
-- Ajouter un petit dejeuner.
-- Fermer l'app.
-- Rouvrir l'app.
-- Verifier que le petit dejeuner est toujours la.
-- Ajouter dejeuner/diner/collation.
-- Verifier que les totaux journee sont corrects.
-- Tester l'ecran Historique.
-- Tester le changement de jour des que possible.
+### Priorite 2 - Tester historique et pesees
+- Faire un reload Expo.
+- Aller dans `Historique`.
+- Ajouter une pesee d'aujourd'hui.
+- Ajouter une pesee d'une ancienne date.
+- Verifier que les pesees apparaissent dans `Mes pesees`.
+- Verifier qu'elles ne creent pas de journee repas a 0 kcal.
+- Demain, verifier que la journee d'aujourd'hui est bien archivee.
+- Ouvrir une journee historique et modifier/supprimer un aliment.
 
 ### Priorite 3 - Tester en conditions reelles pendant une semaine
 - Utiliser l'app tous les jours pour compter les calories.
@@ -728,6 +834,8 @@ npx expo start --dev-client -c
 - Noter les produits scannes mal reconnus.
 - Noter les portions par defaut qui semblent fausses.
 - Verifier si l'app est assez pratique au quotidien.
+- Noter si `Mes aliments` fait gagner du temps.
+- Noter si les objectifs calories/macros sont lisibles.
 
 ### Priorite 4 - Preparation mode autonome sans PC
 - Aujourd'hui l'app en dev client peut encore demander Expo/Metro selon le mode de lancement.
@@ -740,9 +848,9 @@ npx expo start --dev-client -c
 - APK preview/standalone pour utiliser l'app sans ordinateur.
 - Sauvegarde cloud avec Supabase ou Firebase.
 - Creation de compte Apple ID / Google.
-- Historique plus complet avec selection par date.
-- Objectifs calories/macros personnels.
-- Graphiques hebdomadaires.
+- Graphiques hebdomadaires calories/macros.
+- Graphique d'evolution du poids avec les pesees.
+- Historique plus complet avec ajout d'aliments dans une ancienne journee si necessaire.
 - Stabilisation scan code-barres avec Open Food Facts.
 - Bases nutritionnelles autres langues : BEDCA pour Espagne, USDA pour USA.
 - Programmes sportifs en option payante.
