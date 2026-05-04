@@ -1281,10 +1281,6 @@ export default function HomeScreen() {
   const alimentsRepasSelectionne = repasSelectionne?.aliments || [];
   const jourHistoriqueSelectionne = historique.find((jour) => jour.date === dateHistoriqueActive);
   const repasHistoriqueSelectionnes = normaliserRepasJour(jourHistoriqueSelectionne?.repas);
-  const datesHistorique = Array.from(new Set([
-    ...historique.map((jour) => jour.date),
-    ...pesees.map((pesee) => pesee.date),
-  ])).sort((a, b) => b.localeCompare(a));
   const totauxJour = calculerTotaux(repasJour.flatMap((repas) => repas.aliments));
   const totauxConfirmation = calculerTotaux(aliments);
   const totauxRepasSelectionne = calculerTotaux(alimentsRepasSelectionne);
@@ -1449,12 +1445,30 @@ export default function HomeScreen() {
           </TouchableOpacity>
         </View>
 
-        {datesHistorique.length === 0 ? (
-          <Text style={styles.emptyText}>Aucune journee sauvegardee.</Text>
+        {pesees.length > 0 ? (
+          <>
+            <Text style={styles.sectionTitle}>Mes pesees</Text>
+            {pesees.map((pesee) => (
+              <View key={pesee.id} style={styles.weightListRow}>
+                <View>
+                  <Text style={styles.historyMealTitle}>{formatDateHistorique(pesee.date)}</Text>
+                  <Text style={styles.weightText}>{formatMacro(pesee.poids)} kg</Text>
+                </View>
+                <TouchableOpacity style={styles.btnSupprimer} onPress={() => supprimerPesee(pesee.date)}>
+                  <Text style={styles.btnSupprimerText}>X</Text>
+                </TouchableOpacity>
+              </View>
+            ))}
+          </>
+        ) : null}
+
+        <Text style={styles.sectionTitle}>Journees repas</Text>
+        {historique.length === 0 ? (
+          <Text style={styles.emptyText}>Aucune journee de repas sauvegardee.</Text>
         ) : (
-          datesHistorique.map((date) => {
-            const jour = historique.find((item) => item.date === date);
-            const repasJourHistorique = normaliserRepasJour(jour?.repas);
+          historique.map((jour) => {
+            const date = jour.date;
+            const repasJourHistorique = normaliserRepasJour(jour.repas);
             const totaux = calculerTotaux(repasJourHistorique.flatMap((repas) => repas.aliments));
             const pesee = trouverPesee(pesees, date);
             return (
@@ -1981,6 +1995,7 @@ const styles = StyleSheet.create({
   weightDateInput: { flex: 2, borderWidth: 1, borderColor: '#ddd', borderRadius: 10, padding: 12, fontSize: 16, backgroundColor: '#fff', marginRight: 8 },
   weightInput: { flex: 1, borderWidth: 1, borderColor: '#ddd', borderRadius: 10, padding: 12, fontSize: 16, backgroundColor: '#fff', textAlign: 'center' },
   weightText: { width: '100%', fontSize: 14, color: '#555', fontWeight: 'bold', marginBottom: 8 },
+  weightListRow: { width: '100%', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: '#f9f9f9', borderRadius: 10, padding: 14, marginBottom: 8 },
   weightDetailCard: { width: '100%', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: '#f9f9f9', borderRadius: 10, padding: 14, marginBottom: 16 },
   weightDetailText: { fontSize: 24, color: '#FF6B6B', fontWeight: 'bold' },
   emptyText: { width: '100%', color: '#999', textAlign: 'center', fontSize: 16, marginBottom: 20 },
