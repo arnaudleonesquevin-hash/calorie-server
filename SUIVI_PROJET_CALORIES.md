@@ -2,8 +2,8 @@
 
 ## Derniere mise a jour
 - Date : 4 mai 2026
-- Session : 12
-- Etat : nouvelle APK Android installee, sauvegarde locale testee, objectifs nutrition ajoutes, aliments personnels ajoutes, historique rendu modifiable, pesees libres ajoutees. Derniere correction locale : separer clairement les pesees de l'historique repas.
+- Session : 13
+- Etat : nouvelle APK Android installee, sauvegarde locale testee, objectifs nutrition ajoutes, aliments personnels ajoutes, historique rendu modifiable, pesees libres ajoutees. Nouveau module entrainements ajoute avec section Force / HIIT et exercices de force en blocs `series x repetitions`.
 
 ---
 
@@ -129,6 +129,12 @@ Flux poids / pesees :
 - Les pesees sont separees des journees repas pour eviter une fausse journee a 0 kcal.
 - Objectifs nutrition ajoutes : illimite, maximum, minimum ou cible pour calories/proteines/glucides/lipides.
 - Aliments personnels ajoutes : un produit scanne peut etre reutilise sans le rescanner.
+- Module entrainements ajoute :
+  - entree `Entrainements` depuis l'accueil.
+  - choix Force / HIIT.
+  - Force permet de creer un entrainement, par exemple pecs-epaules.
+  - Dans un entrainement force, on peut ajouter des exercices avec nom, poids, blocs `series x repetitions`, rythme et reglage machine.
+  - Les exercices de force sont modifiables et supprimables.
 - Remise a zero automatique prevue au changement de date.
 - APK Android construite via GitHub Actions quand Expo/EAS bloque au telechargement.
 - Railway connecte a GitHub pour deploiement automatique.
@@ -632,6 +638,74 @@ npx expo lint
   - pousser `app/(tabs)/index.tsx` et `SUIVI_PROJET_CALORIES.md`.
   - tester que les pesees apparaissent bien dans `Mes pesees` et pas comme repas a 0 kcal.
 
+### Session 13 - 4 mai 2026
+
+#### 1. Debut du module entrainements
+- Ajout d'une entree `Entrainements` depuis l'ecran d'accueil.
+- L'ecran `Entrainements` separe deux types :
+  - Force.
+  - HIIT.
+- HIIT existe comme ecran placeholder pour plus tard.
+- Force est la priorite actuelle.
+
+#### 2. Entrainements de force
+- L'utilisateur peut creer un entrainement de force avec un nom, par exemple `pecs-epaules`.
+- Chaque entrainement contient une liste d'exercices.
+- Pour chaque exercice, champs prevus :
+  - nom de l'exercice, par exemple developpe couche.
+  - poids souleve.
+  - blocs de series et repetitions.
+  - rythme : `Une serie toutes les`.
+  - reglage machine.
+
+#### 3. Blocs de series
+- L'ancien champ simple `series` + `repetitions` a ete remplace par des blocs.
+- Format voulu : `5 x 10` signifie 5 series de 10 repetitions.
+- On peut ajouter plusieurs blocs pour un meme exercice :
+  - `2 x 10`.
+  - `2 x 8`.
+  - `2 x 6`.
+- Les anciennes donnees d'exercices sont normalisees pour rester compatibles.
+
+#### 4. Modification des exercices
+- Les exercices deja crees peuvent etre modifies directement :
+  - nom.
+  - poids.
+  - rythme.
+  - reglage machine.
+  - blocs de series.
+- On peut ajouter un bloc a un exercice existant.
+- On peut supprimer un bloc.
+- On peut supprimer un exercice.
+- Objectif : suivre la progression, par exemple sur les tractions ou le developpe couche.
+
+#### 5. Tests realises
+- TypeScript OK :
+```powershell
+npx tsc --noEmit
+```
+- Lint Expo OK :
+```powershell
+npx expo lint
+```
+
+#### 6. Push realise
+- Commit pousse sur GitHub :
+  - `38d83d2 add strength training set blocks`
+- Railway a lance un deploiement automatique apres le push.
+- Note de collaboration pour la suite : l'assistant prepare les changements et les commandes, mais l'utilisateur effectue lui-meme les futurs `git commit` / `git push`, sauf demande explicite contraire.
+
+#### 7. Etat en fin de session 13
+- Le module Force est une premiere version fonctionnelle.
+- Pas besoin de rebuild Android pour ces changements : un reload Expo suffit.
+- Prochaine reprise : tester la creation d'un entrainement force complet sur le telephone.
+- Verifier sur mobile :
+  - creation d'un entrainement.
+  - ajout d'exercice.
+  - ajout de plusieurs blocs `series x repetitions`.
+  - modification d'un exercice existant.
+  - suppression d'un bloc et d'un exercice.
+
 ---
 
 ## Valeurs par defaut actuelles
@@ -788,6 +862,7 @@ npx expo start --dev-client -c
 ## Regles importantes pour coder
 - Ne jamais coller de cle API dans le code.
 - Les cles restent dans les variables d'environnement Railway ou dans les fichiers personnels non commits.
+- Regle Git importante : a l'avenir, l'assistant prepare les modifications et donne les commandes, mais l'utilisateur fait lui-meme `git commit` et `git push`, sauf demande explicite contraire.
 - Pas besoin de build EAS pour les changements serveur.
 - Build EAS seulement apres changement de code natif Expo/Android :
 ```powershell
@@ -804,21 +879,22 @@ npx tsc --noEmit
 
 ## Prochains objectifs court terme
 
-### Priorite 1 - Pousser la derniere correction locale
-- Fichiers modifies localement :
-  - `app/(tabs)/index.tsx`
-  - `SUIVI_PROJET_CALORIES.md`
-- Objectif : garder la separation `Mes pesees` / `Journees repas`.
-- Commandes :
-```powershell
-cd C:\Users\arnau\CalorieApp
-git status
-git add "app/(tabs)/index.tsx" SUIVI_PROJET_CALORIES.md
-git commit -m "separate weigh ins from meal history"
-git push
-```
+### Priorite 1 - Tester le module entrainement force
+- Faire un reload Expo.
+- Aller dans `Entrainements`.
+- Ouvrir `Force`.
+- Creer un entrainement, par exemple `pecs-epaules`.
+- Ajouter un exercice, par exemple `developpe couche`.
+- Tester plusieurs blocs :
+  - `2 x 10`.
+  - `2 x 8`.
+  - `2 x 6`.
+- Modifier un exercice existant.
+- Supprimer un bloc.
+- Supprimer un exercice.
+- Noter les problemes d'ergonomie.
 
-### Priorite 2 - Tester historique et pesees
+### Priorite 2 - Continuer les tests nutrition / historique / pesees
 - Faire un reload Expo.
 - Aller dans `Historique`.
 - Ajouter une pesee d'aujourd'hui.
@@ -837,7 +913,12 @@ git push
 - Noter si `Mes aliments` fait gagner du temps.
 - Noter si les objectifs calories/macros sont lisibles.
 
-### Priorite 4 - Preparation mode autonome sans PC
+### Priorite 4 - Suite module entrainement
+- Ameliorer l'ergonomie de la force apres test.
+- Ajouter les notes de fin d'entrainement.
+- Construire ensuite la partie HIIT.
+
+### Priorite 5 - Preparation mode autonome sans PC
 - Aujourd'hui l'app en dev client peut encore demander Expo/Metro selon le mode de lancement.
 - Pour tester au restaurant sans PC, il faudra passer a une APK preview/standalone avec le JavaScript integre.
 - A faire quand les repas + historique sont suffisamment stables.
