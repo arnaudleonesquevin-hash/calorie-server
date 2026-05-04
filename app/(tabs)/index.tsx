@@ -44,6 +44,12 @@ type Repas = {
   aliments: Aliment[];
 };
 
+type Pesee = {
+  id: string;
+  date: string;
+  poids: number;
+};
+
 type Totaux = {
   calories: number;
   proteines: number;
@@ -67,7 +73,7 @@ type ObjectifsNutrition = {
 
 type ObjectifCle = keyof ObjectifsNutrition;
 
-type Etape = 'accueil' | 'saisie' | 'confirmation' | 'detailRepas' | 'historique' | 'mesAliments' | 'objectifs';
+type Etape = 'accueil' | 'saisie' | 'confirmation' | 'detailRepas' | 'historique' | 'detailHistorique' | 'mesAliments' | 'objectifs';
 
 type JourHistorique = {
   date: string;
@@ -78,6 +84,7 @@ type DonneesSauvegardees = {
   dateCourante: string;
   repasJour: Repas[];
   historique: JourHistorique[];
+  pesees: Pesee[];
   alimentsPerso: AlimentPerso[];
   objectifs: ObjectifsNutrition;
 };
@@ -137,6 +144,29 @@ const formatDateHistorique = (date: string) => {
   return `${jour}/${mois}/${annee}`;
 };
 
+const normaliserDateSaisie = (valeur: string) => {
+  const texte = valeur.trim();
+  const iso = texte.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  const fr = texte.match(/^(\d{1,2})[\/.-](\d{1,2})[\/.-](\d{4})$/);
+
+  const annee = iso ? Number(iso[1]) : (fr ? Number(fr[3]) : 0);
+  const mois = iso ? Number(iso[2]) : (fr ? Number(fr[2]) : 0);
+  const jour = iso ? Number(iso[3]) : (fr ? Number(fr[1]) : 0);
+
+  if (!annee || !mois || !jour) return null;
+
+  const date = new Date(annee, mois - 1, jour);
+  if (
+    date.getFullYear() !== annee ||
+    date.getMonth() !== mois - 1 ||
+    date.getDate() !== jour
+  ) {
+    return null;
+  }
+
+  return `${annee}-${String(mois).padStart(2, '0')}-${String(jour).padStart(2, '0')}`;
+};
+
 const normaliserRepasJour = (repas?: Partial<Repas>[] | null): Repas[] => (
   REPAS_OPTIONS.map((option) => {
     const repasSauvegarde = Array.isArray(repas) ? repas.find((item) => item.id === option.id) : undefined;
@@ -158,6 +188,35 @@ const normaliserHistorique = (historique?: Partial<JourHistorique>[] | null): Jo
     }))
     .slice(0, 30);
 };
+
+const creerIdPesee = (date: string) => 'pesee:' + date;
+
+const normaliserPesees = (pesees?: Partial<Pesee>[] | null): Pesee[] => {
+  if (!Array.isArray(pesees)) return [];
+
+  return pesees
+    .map((pesee) => {
+      const date = typeof pesee?.date === 'string' ? normaliserDateSaisie(pesee.date) : null;
+      const poids = Number(String(pesee?.poids ?? '').replace(',', '.'));
+      if (!date || !Number.isFinite(poids) || poids <= 0) return null;
+      return {
+        id: typeof pesee.id === 'string' ? pesee.id : creerIdPesee(date),
+        date,
+        poids: Math.round(poids * 10) / 10,
+      };
+    })
+    .filter((pesee): pesee is Pesee => Boolean(pesee))
+    .sort((a, b) => b.date.localeCompare(a.date))
+    .slice(0, 365);
+};
+
+const trouverPesee = (pesees: Pesee[], date: string) => pesees.find((pesee) => pesee.date === date);
+
+const ajouterPesee = (pesees: Pesee[], pesee: Pesee) => (
+  [pesee, ...pesees.filter((item) => item.date !== pesee.date)]
+    .sort((a, b) => b.date.localeCompare(a.date))
+    .slice(0, 365)
+);
 
 const jourEstVide = (repas: Repas[]) => repas.every((item) => item.aliments.length === 0);
 
@@ -378,10 +437,14 @@ export default function HomeScreen() {
   const [etape, setEtape] = useState<Etape>('accueil');
   const [dateCourante, setDateCourante] = useState(getDateLocale);
   const [historique, setHistorique] = useState<JourHistorique[]>([]);
+  const [dateHistoriqueActive, setDateHistoriqueActive] = useState<string | null>(null);
+  const [pesees, setPesees] = useState<Pesee[]>([]);
   const [alimentsPerso, setAlimentsPerso] = useState<AlimentPerso[]>([]);
   const [objectifs, setObjectifs] = useState<ObjectifsNutrition>(OBJECTIFS_DEFAUT);
   const [stockagePret, setStockagePret] = useState(false);
   const [nouvelAliment, setNouvelAliment] = useState('');
+  const [peseeDate, setPeseeDate] = useState(formatDateHistorique(getDateLocale()));
+  const [peseePoids, setPeseePoids] = useState('');
   const [ajoutEnCours, setAjoutEnCours] = useState(false);
   const [recalcEnCours, setRecalcEnCours] = useState(-1);
   const texteFinalDicteeRef = useRef('');
@@ -409,6 +472,7 @@ export default function HomeScreen() {
           setDateCourante(aujourdhui);
           setRepasJour(creerRepasJour());
           setHistorique([]);
+          setPesees([]);
           setAlimentsPerso([]);
           setObjectifs(OBJECTIFS_DEFAUT);
           return;
@@ -417,6 +481,7 @@ export default function HomeScreen() {
         const donnees = JSON.parse(brut) as Partial<DonneesSauvegardees>;
         const repasSauvegardes = normaliserRepasJour(donnees.repasJour);
         const historiqueSauvegarde = normaliserHistorique(donnees.historique);
+        const peseesSauvegardees = normaliserPesees(donnees.pesees);
         const alimentsPersoSauvegardes = normaliserAlimentsPerso(donnees.alimentsPerso);
         const objectifsSauvegardes = normaliserObjectifs(donnees.objectifs);
 
@@ -429,12 +494,14 @@ export default function HomeScreen() {
             historiqueSauvegarde,
             creerJourHistorique(donnees.dateCourante, repasSauvegardes)
           ));
+          setPesees(peseesSauvegardees);
           setAlimentsPerso(alimentsPersoSauvegardes);
           setObjectifs(objectifsSauvegardes);
         } else {
           setDateCourante(aujourdhui);
           setRepasJour(repasSauvegardes);
           setHistorique(historiqueSauvegarde);
+          setPesees(peseesSauvegardees);
           setAlimentsPerso(alimentsPersoSauvegardes);
           setObjectifs(objectifsSauvegardes);
         }
@@ -459,6 +526,7 @@ export default function HomeScreen() {
       dateCourante,
       repasJour,
       historique,
+      pesees,
       alimentsPerso,
       objectifs,
     };
@@ -466,7 +534,7 @@ export default function HomeScreen() {
     AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(donnees)).catch((e) => {
       console.warn('Erreur sauvegarde locale', e);
     });
-  }, [alimentsPerso, dateCourante, historique, objectifs, repasJour, stockagePret]);
+  }, [alimentsPerso, dateCourante, historique, objectifs, pesees, repasJour, stockagePret]);
 
   useEffect(() => {
     if (!stockagePret) return;
@@ -827,6 +895,113 @@ export default function HomeScreen() {
     )));
   };
 
+  const modifierAlimentHistorique = (
+    repasId: RepasId,
+    index: number,
+    modifier: (aliment: Aliment) => Aliment
+  ) => {
+    if (!dateHistoriqueActive) return;
+
+    setHistorique((historiqueActuel) => historiqueActuel.map((jour) => {
+      if (jour.date !== dateHistoriqueActive) return jour;
+
+      return {
+        ...jour,
+        repas: jour.repas.map((repas) => {
+          if (repas.id !== repasId) return repas;
+
+          const nouveauxAliments = [...repas.aliments];
+          if (!nouveauxAliments[index]) return repas;
+          nouveauxAliments[index] = modifier(nouveauxAliments[index]);
+          return { ...repas, aliments: nouveauxAliments };
+        }),
+      };
+    }));
+  };
+
+  const modifierNomAlimentHistorique = (repasId: RepasId, index: number, valeur: string) => {
+    modifierAlimentHistorique(repasId, index, (aliment) => {
+      const parsed = parseAliment(aliment);
+      return {
+        ...aliment,
+        nom: reconstruireNom(valeur, parsed.quantite, parsed.unite),
+        _nom: valeur,
+        _quantite: parsed.quantite,
+        _unite: parsed.unite,
+      };
+    });
+  };
+
+  const modifierQuantiteAlimentHistorique = (repasId: RepasId, index: number, valeur: string) => {
+    modifierAlimentHistorique(repasId, index, (aliment) => {
+      const parsed = parseAliment(aliment);
+      return {
+        ...aliment,
+        nom: reconstruireNom(parsed.nom, valeur, parsed.unite),
+        _nom: parsed.nom,
+        _quantite: valeur,
+        _unite: parsed.unite,
+      };
+    });
+  };
+
+  const recalculerAlimentHistorique = async (repasId: RepasId, index: number) => {
+    const jour = historique.find((item) => item.date === dateHistoriqueActive);
+    const repas = jour?.repas.find((item) => item.id === repasId);
+    const aliment = repas?.aliments[index];
+    if (!aliment) return;
+
+    const parsed = parseAliment(aliment);
+    const nomComplet = preparerTexteApi(parsed);
+    if (!nomComplet) return;
+
+    setRecalcEnCours(index);
+    try {
+      let alimentRecalcule: Aliment;
+
+      if (estProduitScanne(aliment)) {
+        alimentRecalcule = recalculerProduitScanne(enrichirProduitScanne(aliment), parsed);
+      } else {
+        const info = await calculerCalories(nomComplet);
+        alimentRecalcule = {
+          ...aliment,
+          nom: reconstruireNom(parsed.nom, parsed.quantite, parsed.unite),
+          _nom: parsed.nom,
+          _quantite: parsed.quantite,
+          _unite: parsed.unite,
+          calories: info.calories,
+          proteines: info.proteines,
+          glucides: info.glucides,
+          lipides: info.lipides,
+          sucres: info.sucres,
+          fibres: info.fibres,
+        };
+      }
+
+      modifierAlimentHistorique(repasId, index, () => alimentRecalcule);
+    } catch (e) {
+      Alert.alert('Erreur', String(e));
+    }
+    setRecalcEnCours(-1);
+  };
+
+  const supprimerAlimentHistorique = (repasId: RepasId, index: number) => {
+    if (!dateHistoriqueActive) return;
+
+    setHistorique((historiqueActuel) => historiqueActuel.map((jour) => {
+      if (jour.date !== dateHistoriqueActive) return jour;
+
+      return {
+        ...jour,
+        repas: jour.repas.map((repas) => (
+          repas.id === repasId
+            ? { ...repas, aliments: repas.aliments.filter((_, i) => i !== index) }
+            : repas
+        )),
+      };
+    }));
+  };
+
   const ajouterNouvelAliment = async () => {
     if (!nouvelAliment) return;
     setAjoutEnCours(true);
@@ -857,6 +1032,18 @@ export default function HomeScreen() {
     setEtape('detailRepas');
   };
 
+  const ouvrirHistorique = () => {
+    ignorerResultatsDicteeRef.current = true;
+    couperMicro('abort');
+    setPeseeDate(formatDateHistorique(dateCourante));
+    setEtape('historique');
+  };
+
+  const ouvrirDetailHistorique = (date: string) => {
+    setDateHistoriqueActive(date);
+    setEtape('detailHistorique');
+  };
+
   const scannerProduitRepas = () => {
     const mealId = repasActif || 'collation';
     setRepasActif(mealId);
@@ -883,6 +1070,34 @@ export default function HomeScreen() {
     ignorerResultatsDicteeRef.current = true;
     couperMicro('abort');
     setEtape('objectifs');
+  };
+
+  const enregistrerPesee = () => {
+    const date = normaliserDateSaisie(peseeDate);
+    const poids = nombre(peseePoids);
+
+    if (!date) {
+      Alert.alert('Date invalide', 'Ecris la date au format JJ/MM/AAAA, par exemple 04/05/2026.');
+      return;
+    }
+
+    if (poids <= 0) {
+      Alert.alert('Poids invalide', 'Ecris ton poids en kg, par exemple 78,5.');
+      return;
+    }
+
+    setPesees((actuelles) => ajouterPesee(actuelles, {
+      id: creerIdPesee(date),
+      date,
+      poids: Math.round(poids * 10) / 10,
+    }));
+    setPeseeDate(formatDateHistorique(date));
+    setPeseePoids('');
+    Alert.alert('Pesee enregistree', formatDateHistorique(date) + ' - ' + formatMacro(poids) + ' kg');
+  };
+
+  const supprimerPesee = (date: string) => {
+    setPesees((actuelles) => actuelles.filter((pesee) => pesee.date !== date));
   };
 
   const getDefinitionObjectif = (cle: ObjectifCle) => (
@@ -1064,10 +1279,19 @@ export default function HomeScreen() {
 
   const repasSelectionne = repasJour.find((repas) => repas.id === repasActif);
   const alimentsRepasSelectionne = repasSelectionne?.aliments || [];
+  const jourHistoriqueSelectionne = historique.find((jour) => jour.date === dateHistoriqueActive);
+  const repasHistoriqueSelectionnes = normaliserRepasJour(jourHistoriqueSelectionne?.repas);
+  const datesHistorique = Array.from(new Set([
+    ...historique.map((jour) => jour.date),
+    ...pesees.map((pesee) => pesee.date),
+  ])).sort((a, b) => b.localeCompare(a));
   const totauxJour = calculerTotaux(repasJour.flatMap((repas) => repas.aliments));
   const totauxConfirmation = calculerTotaux(aliments);
   const totauxRepasSelectionne = calculerTotaux(alimentsRepasSelectionne);
+  const totauxHistoriqueSelectionne = calculerTotaux(repasHistoriqueSelectionnes.flatMap((repas) => repas.aliments));
   const objectifCalories = getObjectifInfo('calories', totauxJour.calories);
+  const peseeAujourdhui = trouverPesee(pesees, dateCourante);
+  const peseeHistoriqueSelectionnee = dateHistoriqueActive ? trouverPesee(pesees, dateHistoriqueActive) : undefined;
 
   const renderObjectifMacro = (cle: ObjectifCle, valeur: number) => {
     const info = getObjectifInfo(cle, valeur);
@@ -1201,19 +1425,49 @@ export default function HomeScreen() {
     return (
       <ScrollView contentContainerStyle={styles.container}>
         <Text style={styles.title}>Historique</Text>
-        {historique.length === 0 ? (
+
+        <View style={styles.weightCard}>
+          <Text style={styles.repasTitle}>Ajouter une pesee</Text>
+          <Text style={styles.goalHelpText}>Tu peux mettre aujourdhui ou une ancienne date.</Text>
+          <View style={styles.weightInputRow}>
+            <TextInput
+              style={styles.weightDateInput}
+              value={peseeDate}
+              onChangeText={setPeseeDate}
+              placeholder="JJ/MM/AAAA"
+            />
+            <TextInput
+              style={styles.weightInput}
+              value={peseePoids}
+              onChangeText={(valeur) => setPeseePoids(valeur.replace(/[^0-9,\.]/g, ''))}
+              placeholder="kg"
+              keyboardType="decimal-pad"
+            />
+          </View>
+          <TouchableOpacity style={styles.buttonScan} onPress={enregistrerPesee}>
+            <Text style={styles.buttonText}>Enregistrer la pesee</Text>
+          </TouchableOpacity>
+        </View>
+
+        {datesHistorique.length === 0 ? (
           <Text style={styles.emptyText}>Aucune journee sauvegardee.</Text>
         ) : (
-          historique.map((jour) => {
-            const totaux = calculerTotaux(jour.repas.flatMap((repas) => repas.aliments));
+          datesHistorique.map((date) => {
+            const jour = historique.find((item) => item.date === date);
+            const repasJourHistorique = normaliserRepasJour(jour?.repas);
+            const totaux = calculerTotaux(repasJourHistorique.flatMap((repas) => repas.aliments));
+            const pesee = trouverPesee(pesees, date);
             return (
-              <View key={jour.date} style={styles.historyCard}>
+              <TouchableOpacity key={date} style={styles.historyCard} onPress={() => ouvrirDetailHistorique(date)}>
                 <View style={styles.repasCardHeader}>
-                  <Text style={styles.repasTitle}>{formatDateHistorique(jour.date)}</Text>
+                  <Text style={styles.repasTitle}>{formatDateHistorique(date)}</Text>
                   <Text style={styles.repasCalories}>{totaux.calories} kcal</Text>
                 </View>
+                {pesee ? (
+                  <Text style={styles.weightText}>Poids : {formatMacro(pesee.poids)} kg</Text>
+                ) : null}
                 <Text style={styles.repasMacros}>P {formatMacro(totaux.proteines)}g   G {formatMacro(totaux.glucides)}g   L {formatMacro(totaux.lipides)}g</Text>
-                {jour.repas.map((repas) => {
+                {repasJourHistorique.map((repas) => {
                   if (repas.aliments.length === 0) return null;
 
                   const totauxRepas = calculerTotaux(repas.aliments);
@@ -1226,12 +1480,122 @@ export default function HomeScreen() {
                     </View>
                   );
                 })}
-              </View>
+                <Text style={styles.historyHint}>Appuie pour modifier</Text>
+              </TouchableOpacity>
             );
           })
         )}
         <TouchableOpacity style={styles.buttonSecondary} onPress={() => setEtape('accueil')}>
           <Text style={styles.buttonSecondaryText}>Retour</Text>
+        </TouchableOpacity>
+      </ScrollView>
+    );
+  }
+
+  if (etape === 'detailHistorique') {
+    const aDesAliments = repasHistoriqueSelectionnes.some((repas) => repas.aliments.length > 0);
+
+    return (
+      <ScrollView contentContainerStyle={styles.container}>
+        <Text style={styles.title}>{formatDateHistorique(dateHistoriqueActive || dateCourante)}</Text>
+        {peseeHistoriqueSelectionnee ? (
+          <View style={styles.weightDetailCard}>
+            <Text style={styles.weightDetailText}>{formatMacro(peseeHistoriqueSelectionnee.poids)} kg</Text>
+            <TouchableOpacity style={styles.btnSupprimer} onPress={() => supprimerPesee(peseeHistoriqueSelectionnee.date)}>
+              <Text style={styles.btnSupprimerText}>X</Text>
+            </TouchableOpacity>
+          </View>
+        ) : (
+          <TouchableOpacity
+            style={styles.buttonSecondary}
+            onPress={() => {
+              if (dateHistoriqueActive) setPeseeDate(formatDateHistorique(dateHistoriqueActive));
+              setEtape('historique');
+            }}
+          >
+            <Text style={styles.buttonSecondaryText}>Ajouter une pesee</Text>
+          </TouchableOpacity>
+        )}
+        <Text style={styles.caloriesSmall}>{totauxHistoriqueSelectionne.calories}</Text>
+        <Text style={styles.subtitle}>calories</Text>
+        <View style={styles.macroSummary}>
+          <View style={styles.macroItem}>
+            <Text style={styles.macroValue}>{formatMacro(totauxHistoriqueSelectionne.proteines)}g</Text>
+            <Text style={styles.macroLabel}>Proteines</Text>
+          </View>
+          <View style={styles.macroItem}>
+            <Text style={styles.macroValue}>{formatMacro(totauxHistoriqueSelectionne.glucides)}g</Text>
+            <Text style={styles.macroLabel}>Glucides</Text>
+          </View>
+          <View style={styles.macroItem}>
+            <Text style={styles.macroValue}>{formatMacro(totauxHistoriqueSelectionne.lipides)}g</Text>
+            <Text style={styles.macroLabel}>Lipides</Text>
+          </View>
+        </View>
+
+        {!aDesAliments ? (
+          <Text style={styles.emptyText}>Aucun aliment pour cette journee.</Text>
+        ) : (
+          repasHistoriqueSelectionnes.map((repas) => {
+            if (repas.aliments.length === 0) return null;
+
+            const totauxRepas = calculerTotaux(repas.aliments);
+            return (
+              <View key={repas.id} style={styles.historyEditMealBlock}>
+                <View style={styles.repasCardHeader}>
+                  <Text style={styles.repasTitle}>{repas.nom}</Text>
+                  <Text style={styles.repasCalories}>{totauxRepas.calories} kcal</Text>
+                </View>
+                <Text style={styles.repasMacros}>P {formatMacro(totauxRepas.proteines)}g   G {formatMacro(totauxRepas.glucides)}g   L {formatMacro(totauxRepas.lipides)}g</Text>
+
+                <View style={styles.headerRow}>
+                  <Text style={[styles.headerText, { flex: 2 }]}>Aliment</Text>
+                  <Text style={[styles.headerText, { flex: 1, textAlign: 'center' }]}>Quantite</Text>
+                  <Text style={[styles.headerText, { flex: 1, textAlign: 'right' }]}>Calories</Text>
+                  <View style={{ width: 80 }} />
+                </View>
+
+                {repas.aliments.map((aliment, index) => {
+                  const parsed = parseAliment(aliment);
+                  return (
+                    <View key={index} style={styles.alimentCard}>
+                      <View style={styles.alimentRow}>
+                        <TextInput
+                          style={styles.colNom}
+                          value={parsed.nom}
+                          onChangeText={(v) => modifierNomAlimentHistorique(repas.id, index, v)}
+                        />
+                        <TextInput
+                          style={styles.colQuantite}
+                          value={formatQuantite(parsed.quantite, parsed.unite)}
+                          onChangeText={(v) => modifierQuantiteAlimentHistorique(repas.id, index, v.replace(/[^0-9]/g, ''))}
+                          keyboardType="numeric"
+                        />
+                        <Text style={styles.colCal}>{aliment.calories} kcal</Text>
+                        <View style={styles.alimentBtns}>
+                          <TouchableOpacity onPress={() => recalculerAlimentHistorique(repas.id, index)} style={styles.btnRecalc}>
+                            <Text style={styles.btnRecalcText}>{recalcEnCours === index ? '...' : 'OK'}</Text>
+                          </TouchableOpacity>
+                          <TouchableOpacity onPress={() => supprimerAlimentHistorique(repas.id, index)} style={styles.btnSupprimer}>
+                            <Text style={styles.btnSupprimerText}>X</Text>
+                          </TouchableOpacity>
+                        </View>
+                      </View>
+                      <View style={styles.macroLine}>
+                        <Text style={styles.macroLineText}>P {formatMacro(aliment.proteines)}g</Text>
+                        <Text style={styles.macroLineText}>G {formatMacro(aliment.glucides)}g</Text>
+                        <Text style={styles.macroLineText}>L {formatMacro(aliment.lipides)}g</Text>
+                      </View>
+                    </View>
+                  );
+                })}
+              </View>
+            );
+          })
+        )}
+
+        <TouchableOpacity style={styles.buttonSecondary} onPress={() => setEtape('historique')}>
+          <Text style={styles.buttonSecondaryText}>Retour historique</Text>
         </TouchableOpacity>
       </ScrollView>
     );
@@ -1509,6 +1873,9 @@ export default function HomeScreen() {
         </View>
       ) : null}
       <Text style={styles.dateText}>{formatDateHistorique(dateCourante)}</Text>
+      {peseeAujourdhui ? (
+        <Text style={styles.weightText}>Poids : {formatMacro(peseeAujourdhui.poids)} kg</Text>
+      ) : null}
       <View style={styles.macroSummary}>
         {renderObjectifMacro('proteines', totauxJour.proteines)}
         {renderObjectifMacro('glucides', totauxJour.glucides)}
@@ -1517,7 +1884,7 @@ export default function HomeScreen() {
       <TouchableOpacity style={styles.buttonSecondary} onPress={ouvrirObjectifs}>
         <Text style={styles.buttonSecondaryText}>Objectifs</Text>
       </TouchableOpacity>
-      <TouchableOpacity style={styles.buttonSecondary} onPress={() => setEtape('historique')}>
+      <TouchableOpacity style={styles.buttonSecondary} onPress={ouvrirHistorique}>
         <Text style={styles.buttonSecondaryText}>Historique</Text>
       </TouchableOpacity>
       <TouchableOpacity style={styles.buttonSecondary} onPress={ouvrirMesAliments}>
@@ -1607,6 +1974,15 @@ const styles = StyleSheet.create({
   historyMealBlock: { borderTopWidth: 1, borderTopColor: '#e8e8e8', paddingTop: 8, marginTop: 8 },
   historyMealTitle: { fontSize: 14, fontWeight: 'bold', color: '#333', marginBottom: 4 },
   historyMealFoods: { fontSize: 13, color: '#777' },
+  historyHint: { fontSize: 12, color: '#aaa', marginTop: 8, fontWeight: 'bold' },
+  historyEditMealBlock: { width: '100%', backgroundColor: '#f9f9f9', borderRadius: 10, padding: 12, marginBottom: 12 },
+  weightCard: { width: '100%', backgroundColor: '#f9f9f9', borderRadius: 10, padding: 14, marginBottom: 14 },
+  weightInputRow: { flexDirection: 'row', width: '100%', alignItems: 'center', marginTop: 10, marginBottom: 10 },
+  weightDateInput: { flex: 2, borderWidth: 1, borderColor: '#ddd', borderRadius: 10, padding: 12, fontSize: 16, backgroundColor: '#fff', marginRight: 8 },
+  weightInput: { flex: 1, borderWidth: 1, borderColor: '#ddd', borderRadius: 10, padding: 12, fontSize: 16, backgroundColor: '#fff', textAlign: 'center' },
+  weightText: { width: '100%', fontSize: 14, color: '#555', fontWeight: 'bold', marginBottom: 8 },
+  weightDetailCard: { width: '100%', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: '#f9f9f9', borderRadius: 10, padding: 14, marginBottom: 16 },
+  weightDetailText: { fontSize: 24, color: '#FF6B6B', fontWeight: 'bold' },
   emptyText: { width: '100%', color: '#999', textAlign: 'center', fontSize: 16, marginBottom: 20 },
   detailAlimentRow: { width: '100%', flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#f9f9f9', borderRadius: 10, padding: 12, marginBottom: 8 },
   detailAlimentText: { flex: 1, marginRight: 10 },
