@@ -1,9 +1,9 @@
 # Suivi de Projet - Application Calories & Macros
 
 ## Derniere mise a jour
-- Date : 4 mai 2026
-- Session : 13
-- Etat : nouvelle APK Android installee, sauvegarde locale testee, objectifs nutrition ajoutes, aliments personnels ajoutes, historique rendu modifiable, pesees libres ajoutees. Nouveau module entrainements ajoute avec section Force / HIIT et exercices de force en blocs `series x repetitions`.
+- Date : 5 mai 2026
+- Session : 14
+- Etat : app rendue autonome avec APK preview installable sans Expo ni PC. Module force enrichi avec demarrage d'une seance aujourd'hui, historique des seances et reprise de la derniere performance. L'utilisateur va tester l'app en conditions reelles pendant une semaine.
 
 ---
 
@@ -60,6 +60,7 @@ Application mobile de suivi nutritionnel :
 - `app/(tabs)/scan.tsx` : ecran scanner code-barres.
 - `app/(tabs)/_layout.tsx` : onglets de l'app.
 - `.github/workflows/android-apk.yml` : build APK Android via GitHub Actions.
+- `eas.json` : profils de build Expo/EAS, dont `preview` pour APK autonome.
 - `package.json` / `package-lock.json` : dependances Expo/React Native, dont AsyncStorage.
 - `SUIVI_PROJET_CALORIES.md` : resume de projet a coller au debut des prochaines conversations.
 
@@ -102,7 +103,8 @@ Flux poids / pesees :
 ---
 
 ## Ce qui fonctionne
-- App installee sur Samsung en development build.
+- App installee sur Samsung.
+- APK preview autonome testee : l'app s'ouvre sans Expo, sans PC et sans adresse IP.
 - Ecran principal avec compteur de calories.
 - Saisie manuelle d'un repas.
 - Dictee vocale continue amelioree : le texte s'accumule pendant les pauses.
@@ -135,8 +137,12 @@ Flux poids / pesees :
   - Force permet de creer un entrainement, par exemple pecs-epaules.
   - Dans un entrainement force, on peut ajouter des exercices avec nom, poids, blocs `series x repetitions`, rythme et reglage machine.
   - Les exercices de force sont modifiables et supprimables.
+  - On peut demarrer une seance de force aujourd'hui depuis un entrainement.
+  - Une seance force sauvegarde les performances realisees.
+  - La prochaine fois, l'app affiche la derniere performance pour aider a progresser.
 - Remise a zero automatique prevue au changement de date.
 - APK Android construite via GitHub Actions quand Expo/EAS bloque au telechargement.
+- APK preview autonome construite avec EAS pour test sans PC.
 - Railway connecte a GitHub pour deploiement automatique.
 
 ---
@@ -706,6 +712,98 @@ npx expo lint
   - modification d'un exercice existant.
   - suppression d'un bloc et d'un exercice.
 
+### Session 14 - 5 mai 2026
+
+#### 1. Seances de force realisees
+- Ajout d'un vrai flux de seance de force.
+- Depuis un entrainement force existant, l'utilisateur peut appuyer sur `Demarrer cette seance`.
+- La seance est creee pour aujourd'hui, sans programmation future.
+- Pendant la seance, l'utilisateur peut saisir les resultats reels :
+  - poids utilise.
+  - blocs `series x repetitions`, par exemple `5 x 10`.
+  - plusieurs blocs possibles, par exemple `2 x 10`, `2 x 8`, `2 x 6`.
+  - rythme / repos sous forme de texte.
+  - reglage machine.
+- La seance peut etre terminee puis conservee dans l'historique force.
+
+#### 2. Reprise de la derniere performance
+- Quand l'utilisateur demarre a nouveau le meme entrainement, l'app cherche la derniere seance terminee.
+- Les exercices de la nouvelle seance reprennent les valeurs de la derniere performance connue.
+- L'ecran affiche aussi un rappel `Derniere fois`.
+- Objectif : aider l'utilisateur a progresser, par exemple passer de `5 x 10 a 20 kg` a `5 x 10 a 22 kg`.
+
+#### 3. Tests techniques
+- TypeScript OK :
+```powershell
+npx tsc --noEmit
+```
+- Lint Expo OK :
+```powershell
+npx expo lint
+```
+- Git diff check OK :
+```powershell
+git diff --check
+```
+
+#### 4. Passage en APK autonome
+- Objectif : pouvoir tester l'app pendant une semaine sans ordinateur.
+- Ancien mode : development build qui demandait Expo, le PC et une adresse IP locale.
+- Nouveau mode : APK preview autonome.
+- Modification de `eas.json` :
+  - profil `preview`.
+  - `distribution: internal`.
+  - `android.buildType: apk`.
+  - `autoIncrement: true`.
+- Build lance avec :
+```powershell
+eas build --profile preview --platform android
+```
+- Installation sur Samsung reussie.
+- Android a propose `Mettre a jour cette application`, ce qui est normal : meme application, nouvelle version.
+- Test valide :
+  - l'app s'ouvre sans menu developpeur.
+  - le telephone n'a plus besoin de se connecter a Expo.
+  - plus besoin de `npx expo start`.
+  - plus besoin d'adresse IP.
+  - l'app peut etre utilisee hors de la maison, par exemple au restaurant.
+
+#### 5. Limites de l'APK autonome
+- L'app fonctionne sans PC, mais elle a encore besoin d'internet pour :
+  - appeler le serveur Railway.
+  - appeler Claude via le serveur.
+  - utiliser Open Food Facts pour les scans.
+- Les donnees restent en stockage local sur le telephone.
+- Si l'app est desinstallee, les donnees locales peuvent etre perdues.
+- Plus tard, il faudra ajouter une sauvegarde cloud avec compte utilisateur.
+
+#### 6. Open Food Facts et produits introuvables
+- Observation : un fromage espagnol scanne a donne `Produit introuvable`.
+- Le scan avait bien lu le code-barres, donc ce n'etait probablement pas un probleme de cadrage.
+- Cause probable : produit absent de la base Open Food Facts ou fiche incomplete.
+- Estimation qualitative :
+  - France / Belgique / Suisse : tres bonne couverture.
+  - Espagne / Europe de l'Ouest : bonne mais plus variable.
+  - USA / Canada : correcte.
+  - Amerique latine : plus variable selon pays et marques.
+- A prevoir plus tard :
+  - afficher le code-barres exact quand le produit est introuvable.
+  - proposer `Ajouter ce produit manuellement`.
+  - permettre d'entrer calories/macros depuis l'etiquette.
+  - associer ce produit au code-barres dans `Mes aliments`.
+  - la prochaine fois, l'app reconnaitra le produit localement sans Open Food Facts.
+
+#### 7. Etat en fin de session 14
+- L'utilisateur va tester l'application en conditions reelles pendant environ une semaine.
+- Il va noter :
+  - bugs.
+  - aliments mal reconnus.
+  - scans introuvables.
+  - quantites par defaut incoherentes.
+  - problemes d'ergonomie.
+  - ameliorations utiles au quotidien.
+- A la prochaine session, transformer ce retour terrain en plan de correction priorise.
+
 ---
 
 ## Valeurs par defaut actuelles
@@ -750,6 +848,16 @@ npx expo lint
 ---
 
 ## Procedure de debut de session
+
+### Mode autonome deja installe
+Si l'utilisateur teste seulement l'app sur le Samsung :
+- ouvrir directement CalorieApp.
+- ne pas lancer Expo.
+- ne pas entrer d'adresse IP.
+- le PC n'a pas besoin d'etre allume.
+
+### Mode developpement
+Utiliser cette procedure seulement pour tester des changements de code en direct avec Expo.
 
 ### 1. Trouver l'adresse IP du PC
 Dans PowerShell :
@@ -814,14 +922,31 @@ git push
 
 ## Procedure APK Android
 
-### Cas normal : build EAS
-Apres un changement natif Expo/Android, par exemple ajout de `expo-camera` ou `AsyncStorage` :
+### APK autonome pour tester sans PC
+Pour generer une APK autonome installable, sans serveur Expo local :
 ```powershell
 cd C:\Users\arnau\CalorieApp
-eas build --profile development --platform android
+eas build --profile preview --platform android
 ```
 
-Pour la prochaine reprise, commencer ici :
+Si Expo demande :
+```text
+Install and run the Android build on an emulator?
+```
+Repondre :
+```text
+n
+```
+
+Quand la build est terminee :
+1. Ouvrir le lien Expo sur le Samsung.
+2. Telecharger l'APK.
+3. Appuyer sur `Mettre a jour` si Android le propose.
+4. Ouvrir CalorieApp directement.
+5. Verifier que l'app ne demande plus Expo, ni adresse IP.
+
+### Development build EAS
+Apres un changement natif Expo/Android, par exemple ajout de `expo-camera` ou `AsyncStorage` :
 ```powershell
 cd C:\Users\arnau\CalorieApp
 eas build --profile development --platform android
@@ -879,8 +1004,21 @@ npx tsc --noEmit
 
 ## Prochains objectifs court terme
 
-### Priorite 1 - Tester le module entrainement force
-- Faire un reload Expo.
+### Priorite 1 - Tester en conditions reelles pendant une semaine
+- Utiliser l'APK autonome sans PC.
+- Compter les repas tous les jours.
+- Scanner des produits reels en France/Espagne si possible.
+- Tester `Mes aliments` pour reutiliser les produits frequents.
+- Tester l'historique, les pesees, les objectifs et les repas.
+- Noter :
+  - aliments qui sortent a 0.
+  - produits scannes introuvables.
+  - portions par defaut fausses.
+  - bugs.
+  - clics inutiles.
+  - ameliorations prioritaires.
+
+### Priorite 2 - Tester le module entrainement force
 - Aller dans `Entrainements`.
 - Ouvrir `Force`.
 - Creer un entrainement, par exemple `pecs-epaules`.
@@ -892,10 +1030,12 @@ npx tsc --noEmit
 - Modifier un exercice existant.
 - Supprimer un bloc.
 - Supprimer un exercice.
+- Demarrer une seance aujourd'hui.
+- Terminer la seance.
+- Redemarrer le meme entrainement et verifier que la derniere performance apparait.
 - Noter les problemes d'ergonomie.
 
-### Priorite 2 - Continuer les tests nutrition / historique / pesees
-- Faire un reload Expo.
+### Priorite 3 - Continuer les tests nutrition / historique / pesees
 - Aller dans `Historique`.
 - Ajouter une pesee d'aujourd'hui.
 - Ajouter une pesee d'une ancienne date.
@@ -904,29 +1044,23 @@ npx tsc --noEmit
 - Demain, verifier que la journee d'aujourd'hui est bien archivee.
 - Ouvrir une journee historique et modifier/supprimer un aliment.
 
-### Priorite 3 - Tester en conditions reelles pendant une semaine
-- Utiliser l'app tous les jours pour compter les calories.
-- Noter les aliments qui sortent a 0.
-- Noter les produits scannes mal reconnus.
-- Noter les portions par defaut qui semblent fausses.
-- Verifier si l'app est assez pratique au quotidien.
-- Noter si `Mes aliments` fait gagner du temps.
-- Noter si les objectifs calories/macros sont lisibles.
-
 ### Priorite 4 - Suite module entrainement
 - Ameliorer l'ergonomie de la force apres test.
 - Ajouter les notes de fin d'entrainement.
 - Construire ensuite la partie HIIT.
 
-### Priorite 5 - Preparation mode autonome sans PC
-- Aujourd'hui l'app en dev client peut encore demander Expo/Metro selon le mode de lancement.
-- Pour tester au restaurant sans PC, il faudra passer a une APK preview/standalone avec le JavaScript integre.
-- A faire quand les repas + historique sont suffisamment stables.
+### Priorite 5 - Scan introuvable / fallback produit manuel
+- Quand Open Food Facts ne trouve pas un produit :
+  - afficher le code-barres.
+  - proposer `Ajouter manuellement`.
+  - entrer calories/macros depuis l'etiquette.
+  - sauvegarder le produit localement avec son code-barres.
+- Objectif : reduire les frustrations sur produits locaux, notamment Espagne et Amerique latine.
 
 ---
 
 ## Prochaines etapes apres court terme
-- APK preview/standalone pour utiliser l'app sans ordinateur.
+- Ameliorer l'APK autonome apres la semaine de test.
 - Sauvegarde cloud avec Supabase ou Firebase.
 - Creation de compte Apple ID / Google.
 - Graphiques hebdomadaires calories/macros.

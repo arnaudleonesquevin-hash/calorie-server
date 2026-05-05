@@ -72,6 +72,26 @@ type EntrainementForce = {
   exercices: ExerciceForce[];
 };
 
+type ExerciceSeanceForce = {
+  id: string;
+  exerciceModeleId: string;
+  nom: string;
+  poids: string;
+  blocs: BlocSeriesForce[];
+  repos: string;
+  reglage: string;
+};
+
+type SeanceForce = {
+  id: string;
+  entrainementId: string;
+  nom: string;
+  date: string;
+  dateHeure: string;
+  terminee: boolean;
+  exercices: ExerciceSeanceForce[];
+};
+
 type Totaux = {
   calories: number;
   proteines: number;
@@ -95,7 +115,7 @@ type ObjectifsNutrition = {
 
 type ObjectifCle = keyof ObjectifsNutrition;
 
-type Etape = 'accueil' | 'saisie' | 'confirmation' | 'detailRepas' | 'historique' | 'detailHistorique' | 'mesAliments' | 'objectifs' | 'entrainements' | 'force' | 'hiit' | 'detailEntrainementForce';
+type Etape = 'accueil' | 'saisie' | 'confirmation' | 'detailRepas' | 'historique' | 'detailHistorique' | 'mesAliments' | 'objectifs' | 'entrainements' | 'force' | 'hiit' | 'detailEntrainementForce' | 'seanceForce';
 
 type JourHistorique = {
   date: string;
@@ -108,6 +128,7 @@ type DonneesSauvegardees = {
   historique: JourHistorique[];
   pesees: Pesee[];
   entrainementsForce: EntrainementForce[];
+  seancesForce: SeanceForce[];
   alimentsPerso: AlimentPerso[];
   objectifs: ObjectifsNutrition;
 };
@@ -307,6 +328,43 @@ const normaliserEntrainementsForce = (entrainements?: Partial<EntrainementForce>
     .slice(0, 50);
 };
 
+const normaliserSeancesForce = (seances?: Partial<SeanceForce>[] | null): SeanceForce[] => {
+  if (!Array.isArray(seances)) return [];
+
+  return seances
+    .filter((seance) => seance && typeof seance === 'object')
+    .map((seance) => ({
+      id: typeof seance.id === 'string' ? seance.id : creerIdLocal('seance'),
+      entrainementId: typeof seance.entrainementId === 'string' ? seance.entrainementId : '',
+      nom: typeof seance.nom === 'string' ? seance.nom : 'Seance force',
+      date: typeof seance.date === 'string' ? seance.date : getDateLocale(),
+      dateHeure: typeof seance.dateHeure === 'string' ? seance.dateHeure : new Date().toISOString(),
+      terminee: Boolean(seance.terminee),
+      exercices: Array.isArray(seance.exercices)
+        ? seance.exercices
+          .filter((exercice) => exercice && typeof exercice === 'object')
+          .map((exercice) => {
+            const exerciceBrut = exercice as Partial<ExerciceSeanceForce> & {
+              blocs?: Partial<BlocSeriesForce>[];
+            };
+
+            return {
+              id: typeof exerciceBrut.id === 'string' ? exerciceBrut.id : creerIdLocal('seance-exercice'),
+              exerciceModeleId: typeof exerciceBrut.exerciceModeleId === 'string' ? exerciceBrut.exerciceModeleId : '',
+              nom: typeof exerciceBrut.nom === 'string' ? exerciceBrut.nom : 'Exercice',
+              poids: typeof exerciceBrut.poids === 'string' ? exerciceBrut.poids : '',
+              blocs: normaliserBlocsForce(exerciceBrut.blocs),
+              repos: typeof exerciceBrut.repos === 'string' ? exerciceBrut.repos : '',
+              reglage: typeof exerciceBrut.reglage === 'string' ? exerciceBrut.reglage : '',
+            };
+          })
+        : [],
+    }))
+    .filter((seance) => seance.entrainementId)
+    .sort((a, b) => b.dateHeure.localeCompare(a.dateHeure))
+    .slice(0, 100);
+};
+
 const jourEstVide = (repas: Repas[]) => repas.every((item) => item.aliments.length === 0);
 
 const creerJourHistorique = (date: string, repas: Repas[]): JourHistorique => ({
@@ -485,6 +543,23 @@ const formatReposForce = (minutesTexte: string, secondesTexte: string) => {
   return '';
 };
 
+const copierBlocsForce = (blocs: BlocSeriesForce[]) => (
+  blocs.map((bloc) => ({
+    id: creerIdLocal('bloc'),
+    series: bloc.series,
+    repetitions: bloc.repetitions,
+  }))
+);
+
+const formatBlocsForce = (blocs: BlocSeriesForce[]) => {
+  const texte = blocs
+    .filter((bloc) => bloc.series || bloc.repetitions)
+    .map((bloc) => `${bloc.series || '?'} x ${bloc.repetitions || '?'}`)
+    .join(' + ');
+
+  return texte || '-';
+};
+
 const estProduitScanne = (aliment: Aliment) => Boolean(aliment.code_barres || aliment.source === 'Open Food Facts');
 
 const enrichirProduitScanne = (aliment: Aliment): Aliment => {
@@ -546,6 +621,8 @@ export default function HomeScreen() {
   const [pesees, setPesees] = useState<Pesee[]>([]);
   const [entrainementsForce, setEntrainementsForce] = useState<EntrainementForce[]>([]);
   const [entrainementForceActifId, setEntrainementForceActifId] = useState<string | null>(null);
+  const [seancesForce, setSeancesForce] = useState<SeanceForce[]>([]);
+  const [seanceForceActiveId, setSeanceForceActiveId] = useState<string | null>(null);
   const [alimentsPerso, setAlimentsPerso] = useState<AlimentPerso[]>([]);
   const [objectifs, setObjectifs] = useState<ObjectifsNutrition>(OBJECTIFS_DEFAUT);
   const [stockagePret, setStockagePret] = useState(false);
@@ -590,6 +667,7 @@ export default function HomeScreen() {
           setHistorique([]);
           setPesees([]);
           setEntrainementsForce([]);
+          setSeancesForce([]);
           setAlimentsPerso([]);
           setObjectifs(OBJECTIFS_DEFAUT);
           return;
@@ -600,6 +678,7 @@ export default function HomeScreen() {
         const historiqueSauvegarde = normaliserHistorique(donnees.historique);
         const peseesSauvegardees = normaliserPesees(donnees.pesees);
         const entrainementsForceSauvegardes = normaliserEntrainementsForce(donnees.entrainementsForce);
+        const seancesForceSauvegardees = normaliserSeancesForce(donnees.seancesForce);
         const alimentsPersoSauvegardes = normaliserAlimentsPerso(donnees.alimentsPerso);
         const objectifsSauvegardes = normaliserObjectifs(donnees.objectifs);
 
@@ -614,6 +693,7 @@ export default function HomeScreen() {
           ));
           setPesees(peseesSauvegardees);
           setEntrainementsForce(entrainementsForceSauvegardes);
+          setSeancesForce(seancesForceSauvegardees);
           setAlimentsPerso(alimentsPersoSauvegardes);
           setObjectifs(objectifsSauvegardes);
         } else {
@@ -622,6 +702,7 @@ export default function HomeScreen() {
           setHistorique(historiqueSauvegarde);
           setPesees(peseesSauvegardees);
           setEntrainementsForce(entrainementsForceSauvegardes);
+          setSeancesForce(seancesForceSauvegardees);
           setAlimentsPerso(alimentsPersoSauvegardes);
           setObjectifs(objectifsSauvegardes);
         }
@@ -648,6 +729,7 @@ export default function HomeScreen() {
       historique,
       pesees,
       entrainementsForce,
+      seancesForce,
       alimentsPerso,
       objectifs,
     };
@@ -655,7 +737,7 @@ export default function HomeScreen() {
     AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(donnees)).catch((e) => {
       console.warn('Erreur sauvegarde locale', e);
     });
-  }, [alimentsPerso, dateCourante, entrainementsForce, historique, objectifs, pesees, repasJour, stockagePret]);
+  }, [alimentsPerso, dateCourante, entrainementsForce, historique, objectifs, pesees, repasJour, seancesForce, stockagePret]);
 
   useEffect(() => {
     if (!stockagePret) return;
@@ -1418,6 +1500,169 @@ export default function HomeScreen() {
     }
   };
 
+  const trouverDerniereSeanceForce = (entrainementId: string, exclureId?: string) => (
+    seancesForce
+      .filter((seance) => seance.entrainementId === entrainementId && seance.id !== exclureId && seance.terminee)
+      .sort((a, b) => b.dateHeure.localeCompare(a.dateHeure))[0]
+  );
+
+  const trouverExercicePrecedent = (
+    seancePrecedente: SeanceForce | undefined,
+    exercice: ExerciceForce | ExerciceSeanceForce
+  ) => {
+    if (!seancePrecedente) return undefined;
+    const exerciceModeleId = 'exerciceModeleId' in exercice ? exercice.exerciceModeleId : exercice.id;
+    const nomExercice = exercice.nom.trim().toLowerCase();
+
+    return seancePrecedente.exercices.find((item) => (
+      item.exerciceModeleId === exerciceModeleId || item.nom.trim().toLowerCase() === nomExercice
+    ));
+  };
+
+  const demarrerSeanceForce = (entrainementId: string) => {
+    const entrainement = entrainementsForce.find((item) => item.id === entrainementId);
+    if (!entrainement) return;
+
+    if (entrainement.exercices.length === 0) {
+      Alert.alert('Aucun exercice', 'Ajoute au moins un exercice avant de demarrer cette seance.');
+      return;
+    }
+
+    const derniereSeance = trouverDerniereSeanceForce(entrainementId);
+    const maintenant = new Date().toISOString();
+
+    const nouvelleSeance: SeanceForce = {
+      id: creerIdLocal('seance'),
+      entrainementId: entrainement.id,
+      nom: entrainement.nom,
+      date: getDateLocale(),
+      dateHeure: maintenant,
+      terminee: false,
+      exercices: entrainement.exercices.map((exercice) => {
+        const precedent = trouverExercicePrecedent(derniereSeance, exercice);
+        const blocs = precedent?.blocs.length ? precedent.blocs : exercice.blocs;
+
+        return {
+          id: creerIdLocal('seance-exercice'),
+          exerciceModeleId: exercice.id,
+          nom: exercice.nom,
+          poids: precedent?.poids || exercice.poids,
+          blocs: copierBlocsForce(blocs),
+          repos: precedent?.repos || exercice.repos,
+          reglage: precedent?.reglage || exercice.reglage,
+        };
+      }),
+    };
+
+    setSeancesForce((actuels) => [nouvelleSeance, ...actuels].slice(0, 100));
+    setSeanceForceActiveId(nouvelleSeance.id);
+    setEtape('seanceForce');
+  };
+
+  const ouvrirSeanceForce = (id: string) => {
+    setSeanceForceActiveId(id);
+    setEtape('seanceForce');
+  };
+
+  const modifierExerciceSeanceForce = (exerciceId: string, changements: Partial<ExerciceSeanceForce>) => {
+    if (!seanceForceActiveId) return;
+
+    setSeancesForce((actuels) => actuels.map((seance) => {
+      if (seance.id !== seanceForceActiveId) return seance;
+
+      return {
+        ...seance,
+        exercices: seance.exercices.map((exercice) => (
+          exercice.id === exerciceId ? { ...exercice, ...changements } : exercice
+        )),
+      };
+    }));
+  };
+
+  const modifierBlocSeanceForce = (
+    exerciceId: string,
+    blocId: string,
+    changements: Partial<BlocSeriesForce>
+  ) => {
+    if (!seanceForceActiveId) return;
+
+    setSeancesForce((actuels) => actuels.map((seance) => {
+      if (seance.id !== seanceForceActiveId) return seance;
+
+      return {
+        ...seance,
+        exercices: seance.exercices.map((exercice) => (
+          exercice.id === exerciceId
+            ? {
+              ...exercice,
+              blocs: exercice.blocs.map((bloc) => (
+                bloc.id === blocId ? { ...bloc, ...changements } : bloc
+              )),
+            }
+            : exercice
+        )),
+      };
+    }));
+  };
+
+  const ajouterBlocSeanceForce = (exerciceId: string) => {
+    if (!seanceForceActiveId) return;
+
+    setSeancesForce((actuels) => actuels.map((seance) => {
+      if (seance.id !== seanceForceActiveId) return seance;
+
+      return {
+        ...seance,
+        exercices: seance.exercices.map((exercice) => (
+          exercice.id === exerciceId
+            ? {
+              ...exercice,
+              blocs: [
+                ...exercice.blocs,
+                { id: creerIdLocal('bloc'), series: '', repetitions: '' },
+              ],
+            }
+            : exercice
+        )),
+      };
+    }));
+  };
+
+  const supprimerBlocSeanceForce = (exerciceId: string, blocId: string) => {
+    if (!seanceForceActiveId) return;
+
+    setSeancesForce((actuels) => actuels.map((seance) => {
+      if (seance.id !== seanceForceActiveId) return seance;
+
+      return {
+        ...seance,
+        exercices: seance.exercices.map((exercice) => (
+          exercice.id === exerciceId
+            ? { ...exercice, blocs: exercice.blocs.filter((bloc) => bloc.id !== blocId) }
+            : exercice
+        )),
+      };
+    }));
+  };
+
+  const terminerSeanceForce = () => {
+    if (!seanceForceActiveId) return;
+
+    setSeancesForce((actuels) => actuels.map((seance) => (
+      seance.id === seanceForceActiveId ? { ...seance, terminee: true } : seance
+    )));
+    Alert.alert('Seance enregistree', 'Ta seance est sauvegardee dans l historique force.');
+    setEtape('force');
+  };
+
+  const supprimerSeanceForce = (id: string) => {
+    setSeancesForce((actuels) => actuels.filter((seance) => seance.id !== id));
+    if (seanceForceActiveId === id) {
+      setSeanceForceActiveId(null);
+      setEtape('force');
+    }
+  };
+
   const enregistrerPesee = () => {
     const date = normaliserDateSaisie(peseeDate);
     const poids = nombre(peseePoids);
@@ -1628,6 +1873,10 @@ export default function HomeScreen() {
   const jourHistoriqueSelectionne = historique.find((jour) => jour.date === dateHistoriqueActive);
   const repasHistoriqueSelectionnes = normaliserRepasJour(jourHistoriqueSelectionne?.repas);
   const entrainementForceActif = entrainementsForce.find((entrainement) => entrainement.id === entrainementForceActifId);
+  const seanceForceActive = seancesForce.find((seance) => seance.id === seanceForceActiveId);
+  const derniereSeanceForceActive = seanceForceActive
+    ? trouverDerniereSeanceForce(seanceForceActive.entrainementId, seanceForceActive.id)
+    : undefined;
   const totauxJour = calculerTotaux(repasJour.flatMap((repas) => repas.aliments));
   const totauxConfirmation = calculerTotaux(aliments);
   const totauxRepasSelectionne = calculerTotaux(alimentsRepasSelectionne);
@@ -1764,6 +2013,36 @@ export default function HomeScreen() {
               <TouchableOpacity style={styles.trainingOpenButton} onPress={() => ouvrirDetailEntrainementForce(entrainement.id)}>
                 <Text style={styles.trainingOpenButtonText}>Ouvrir</Text>
               </TouchableOpacity>
+              <TouchableOpacity style={styles.trainingStartButton} onPress={() => demarrerSeanceForce(entrainement.id)}>
+                <Text style={styles.trainingOpenButtonText}>Demarrer cette seance</Text>
+              </TouchableOpacity>
+            </View>
+          ))
+        )}
+
+        <Text style={styles.sectionTitle}>Historique force</Text>
+        {seancesForce.length === 0 ? (
+          <Text style={styles.emptyText}>Aucune seance force realisee pour le moment.</Text>
+        ) : (
+          seancesForce.slice(0, 10).map((seance) => (
+            <View key={seance.id} style={styles.trainingCard}>
+              <View style={styles.repasCardHeader}>
+                <View>
+                  <Text style={styles.repasTitle}>{seance.nom}</Text>
+                  <Text style={styles.repasMacros}>
+                    {formatDateHistorique(seance.date)} - {seance.terminee ? 'terminee' : 'en cours'}
+                  </Text>
+                </View>
+                <TouchableOpacity style={styles.btnSupprimer} onPress={() => supprimerSeanceForce(seance.id)}>
+                  <Text style={styles.btnSupprimerText}>X</Text>
+                </TouchableOpacity>
+              </View>
+              <Text style={styles.repasFoods}>
+                {seance.exercices.map((exercice) => exercice.nom).join(', ') || 'Aucun exercice'}
+              </Text>
+              <TouchableOpacity style={styles.trainingOpenButton} onPress={() => ouvrirSeanceForce(seance.id)}>
+                <Text style={styles.trainingOpenButtonText}>Ouvrir la seance</Text>
+              </TouchableOpacity>
             </View>
           ))
         )}
@@ -1792,6 +2071,9 @@ export default function HomeScreen() {
       <ScrollView contentContainerStyle={styles.container}>
         <Text style={styles.title}>{entrainementForceActif.nom}</Text>
         <Text style={styles.mealSubtitle}>Exercices de force</Text>
+        <TouchableOpacity style={styles.buttonScan} onPress={() => demarrerSeanceForce(entrainementForceActif.id)}>
+          <Text style={styles.buttonText}>Demarrer cette seance</Text>
+        </TouchableOpacity>
 
         <View style={styles.trainingFormCard}>
           <Text style={styles.repasTitle}>Ajouter un exercice</Text>
@@ -1956,6 +2238,134 @@ export default function HomeScreen() {
         <TouchableOpacity style={styles.button} onPress={() => setEtape('force')}>
           <Text style={styles.buttonText}>Terminer</Text>
         </TouchableOpacity>
+        <TouchableOpacity style={styles.buttonSecondary} onPress={() => setEtape('force')}>
+          <Text style={styles.buttonSecondaryText}>Retour</Text>
+        </TouchableOpacity>
+      </ScrollView>
+    );
+  }
+
+  if (etape === 'seanceForce') {
+    if (!seanceForceActive) {
+      return (
+        <ScrollView contentContainerStyle={styles.container}>
+          <Text style={styles.title}>Seance force</Text>
+          <Text style={styles.emptyText}>Seance introuvable.</Text>
+          <TouchableOpacity style={styles.buttonSecondary} onPress={() => setEtape('force')}>
+            <Text style={styles.buttonSecondaryText}>Retour</Text>
+          </TouchableOpacity>
+        </ScrollView>
+      );
+    }
+
+    return (
+      <ScrollView contentContainerStyle={styles.container}>
+        <Text style={styles.title}>{seanceForceActive.nom}</Text>
+        <Text style={styles.mealSubtitle}>
+          {formatDateHistorique(seanceForceActive.date)} - {seanceForceActive.terminee ? 'seance terminee' : 'seance en cours'}
+        </Text>
+
+        {derniereSeanceForceActive ? (
+          <View style={styles.trainingFormCard}>
+            <Text style={styles.repasTitle}>Derniere seance</Text>
+            <Text style={styles.repasMacros}>{formatDateHistorique(derniereSeanceForceActive.date)}</Text>
+            <Text style={styles.repasFoods}>
+              {derniereSeanceForceActive.exercices.map((exercice) => (
+                `${exercice.nom}: ${exercice.poids || '-'} kg, ${formatBlocsForce(exercice.blocs)}`
+              )).join(' | ')}
+            </Text>
+          </View>
+        ) : (
+          <Text style={styles.emptyText}>Premiere seance pour cet entrainement.</Text>
+        )}
+
+        <Text style={styles.sectionTitle}>Resultats aujourd&apos;hui</Text>
+        {seanceForceActive.exercices.map((exercice) => {
+          const precedent = trouverExercicePrecedent(derniereSeanceForceActive, exercice);
+
+          return (
+            <View key={exercice.id} style={styles.trainingCard}>
+              <Text style={styles.repasTitle}>{exercice.nom}</Text>
+              {precedent ? (
+                <Text style={styles.repasMacros}>
+                  Derniere fois : {precedent.poids || '-'} kg - {formatBlocsForce(precedent.blocs)}
+                </Text>
+              ) : (
+                <Text style={styles.repasMacros}>Pas de performance precedente.</Text>
+              )}
+
+              <View style={styles.trainingInputRow}>
+                <TextInput
+                  style={styles.trainingSmallInput}
+                  value={exercice.poids}
+                  onChangeText={(valeur) => modifierExerciceSeanceForce(exercice.id, { poids: valeur.replace(/[^0-9,\.]/g, '') })}
+                  placeholder="Poids kg"
+                  keyboardType="decimal-pad"
+                />
+                <TextInput
+                  style={styles.trainingSmallInput}
+                  value={exercice.repos}
+                  onChangeText={(valeur) => modifierExerciceSeanceForce(exercice.id, { repos: valeur })}
+                  placeholder="Une serie toutes les"
+                />
+              </View>
+
+              <Text style={styles.trainingFieldLabel}>Series realisees</Text>
+              {exercice.blocs.length === 0 ? (
+                <Text style={styles.repasMacros}>Aucun bloc saisi.</Text>
+              ) : (
+                exercice.blocs.map((bloc) => (
+                  <View key={bloc.id} style={styles.trainingBlockRow}>
+                    <TextInput
+                      style={styles.trainingBlockInput}
+                      value={bloc.series}
+                      onChangeText={(valeur) => modifierBlocSeanceForce(
+                        exercice.id,
+                        bloc.id,
+                        { series: valeur.replace(/[^0-9]/g, '') }
+                      )}
+                      placeholder="Series"
+                      keyboardType="numeric"
+                    />
+                    <Text style={styles.trainingBlockSeparator}>x</Text>
+                    <TextInput
+                      style={styles.trainingBlockInput}
+                      value={bloc.repetitions}
+                      onChangeText={(valeur) => modifierBlocSeanceForce(
+                        exercice.id,
+                        bloc.id,
+                        { repetitions: valeur.replace(/[^0-9]/g, '') }
+                      )}
+                      placeholder="Reps"
+                      keyboardType="numeric"
+                    />
+                    <TouchableOpacity style={styles.trainingMiniDeleteButton} onPress={() => supprimerBlocSeanceForce(exercice.id, bloc.id)}>
+                      <Text style={styles.trainingMiniDeleteButtonText}>X</Text>
+                    </TouchableOpacity>
+                  </View>
+                ))
+              )}
+
+              <TouchableOpacity style={styles.trainingOpenButton} onPress={() => ajouterBlocSeanceForce(exercice.id)}>
+                <Text style={styles.trainingOpenButtonText}>Ajouter bloc</Text>
+              </TouchableOpacity>
+              <TextInput
+                style={styles.trainingFullInput}
+                value={exercice.reglage}
+                onChangeText={(valeur) => modifierExerciceSeanceForce(exercice.id, { reglage: valeur })}
+                placeholder="Reglage machine"
+              />
+            </View>
+          );
+        })}
+
+        {!seanceForceActive.terminee ? (
+          <TouchableOpacity style={styles.button} onPress={terminerSeanceForce}>
+            <Text style={styles.buttonText}>Terminer seance</Text>
+          </TouchableOpacity>
+        ) : (
+          <Text style={styles.emptyText}>Cette seance est terminee. Les modifications restent sauvegardees.</Text>
+        )}
         <TouchableOpacity style={styles.buttonSecondary} onPress={() => setEtape('force')}>
           <Text style={styles.buttonSecondaryText}>Retour</Text>
         </TouchableOpacity>
@@ -2600,6 +3010,7 @@ const styles = StyleSheet.create({
   trainingExerciseNameInput: { flex: 1, borderBottomWidth: 1, borderColor: '#ddd', fontSize: 18, fontWeight: 'bold', color: '#222', marginRight: 8 },
   trainingFieldLabel: { width: '100%', fontSize: 13, color: '#777', fontWeight: 'bold', marginBottom: 6 },
   trainingOpenButton: { backgroundColor: '#4ECDC4', borderRadius: 10, paddingVertical: 10, alignItems: 'center', marginTop: 8 },
+  trainingStartButton: { backgroundColor: '#FF6B6B', borderRadius: 10, paddingVertical: 10, alignItems: 'center', marginTop: 8 },
   trainingOpenButtonText: { color: '#fff', fontSize: 15, fontWeight: 'bold' },
   repasCard: { width: '100%', backgroundColor: '#f9f9f9', borderRadius: 10, padding: 14, marginBottom: 10 },
   repasCardHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 },
