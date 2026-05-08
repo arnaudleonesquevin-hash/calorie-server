@@ -39,13 +39,6 @@
             "backgroundColor": "#000000"
           }
         }
-      ],
-      "expo-speech-recognition",
-      [
-        "expo-camera",
-        {
-          "cameraPermission": "Autorise CalorieApp a utiliser la camera pour scanner les codes-barres."
-        }
       ]
     ],
     "experiments": {

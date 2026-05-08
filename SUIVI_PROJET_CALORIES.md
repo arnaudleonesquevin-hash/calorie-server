@@ -1,16 +1,16 @@
 # Suivi de Projet - Application Calories & Macros
 
 ## Derniere mise a jour
-- Date : 5 mai 2026
-- Session : 14
-- Etat : app rendue autonome avec APK preview installable sans Expo ni PC. Module force enrichi avec demarrage d'une seance aujourd'hui, historique des seances et reprise de la derniere performance. L'utilisateur va tester l'app en conditions reelles pendant une semaine.
+- Date : 8 mai 2026
+- Session : 15
+- Etat : pivot produit. La partie nutrition est retiree de l'application mobile. L'app devient un carnet d'entrainement centre sur la force, les seances realisees et la progression. Les appels nutrition/Claude/Open Food Facts ne sont plus utilises cote app.
 
 ---
 
 ## Objectif business
 - Modele freemium : version de base gratuite + options payantes.
-- Version gratuite : comptage de calories, repas, historique, macros.
-- Options payantes prevues : programmes sportifs.
+- Version gratuite envisagee : carnet d'entrainement, suivi des seances, progression.
+- Options payantes prevues : programmes sportifs, routines personnalisees, contenus coach.
 - Paiement prevu via App Store / Play Store.
 - Creation de compte prevue via Apple ID / Google.
 - Marches cibles : France, Espagne, Amerique Latine, puis USA.
@@ -18,14 +18,13 @@
 ---
 
 ## Description du projet
-Application mobile de suivi nutritionnel :
-- Compter les calories journalieres.
-- Classer par macronutriments : proteines, glucides, lipides, sucres, fibres.
-- Dictee vocale pour saisir un repas.
-- Journal alimentaire jour par jour.
-- Historique des repas.
-- Pesees libres pour suivre le poids dans le temps.
-- Scan code-barres avec Open Food Facts, ajoute et a tester sur produits reels.
+Application mobile de suivi d'entrainement :
+- Creer des programmes de force.
+- Noter les exercices, charges, series et repetitions.
+- Enregistrer les seances realisees.
+- Retrouver la derniere performance pour progresser d'une seance a l'autre.
+- Construire plus tard une section HIIT.
+- La partie nutrition est arretee pour le moment.
 
 ---
 
@@ -39,11 +38,8 @@ Application mobile de suivi nutritionnel :
 ## Stack technique
 - Mobile : React Native + Expo.
 - Backend : Node.js + Express sur Railway.
-- IA : API Claude Haiku pour interpreter la dictee vocale.
-- Base nutritionnelle principale : Ciqual 2020.
-- Base courte envoyee a Claude : aliments courants + extras.
-- Fichier extras : `ciqual_extras.json`.
-- Scan produit : `expo-camera` cote app + Open Food Facts cote serveur.
+- IA / nutrition : conservee dans l'historique du projet mais non utilisee par l'app mobile actuelle.
+- Base nutritionnelle : conservee dans le repo mais non utilisee par l'app mobile actuelle.
 - Stockage local : `@react-native-async-storage/async-storage`.
 - Stockage cloud prevu plus tard : Supabase ou Firebase.
 - Niveau actuel : debutant, besoin de commandes pas a pas.
@@ -67,80 +63,44 @@ Application mobile de suivi nutritionnel :
 ---
 
 ## Architecture actuelle
-1. L'utilisateur dicte ou tape son repas.
-2. L'app envoie le texte au serveur Railway.
-3. Le serveur envoie a Claude la dictee + la liste des aliments disponibles.
-4. Claude choisit un nom exact dans la liste et extrait quantite + unite.
-5. Le serveur applique les valeurs par defaut si la quantite est absente.
-6. Le serveur cherche l'aliment dans les index Ciqual/extras.
-7. Le serveur renvoie calories + macros.
-8. L'app affiche l'ecran de confirmation avec modification possible.
+Flux actuel entrainement :
+1. L'utilisateur ouvre l'app autonome sur le Samsung.
+2. L'ecran principal affiche le carnet d'entrainement.
+3. L'utilisateur choisit Force ou HIIT.
+4. Force permet de creer des programmes d'entrainement.
+5. Chaque programme contient des exercices.
+6. Chaque exercice contient poids, blocs `series x repetitions`, rythme/repos et reglage machine.
+7. L'utilisateur peut demarrer une seance aujourd'hui depuis un programme.
+8. La seance reprend la derniere performance connue quand elle existe.
+9. L'utilisateur modifie les resultats reels pendant ou apres la seance.
+10. La seance est sauvegardee localement avec AsyncStorage.
 
-Flux scan :
-1. L'utilisateur ouvre l'onglet Scan.
-2. L'app demande l'autorisation camera.
-3. L'app lit le code-barres.
-4. L'app appelle le serveur Railway sur `/barcode/:code`.
-5. Le serveur interroge Open Food Facts.
-6. Le serveur transforme le produit en format compatible avec l'app : nom, calories, proteines, glucides, lipides, quantite.
-7. L'app renvoie le produit scanne vers l'ecran de confirmation.
+Flux HIIT :
+1. L'ecran HIIT existe comme placeholder.
+2. La logique detaillee sera construite plus tard.
 
-Flux repas / sauvegarde locale :
-1. L'utilisateur choisit un repas : petit dejeuner, dejeuner, diner ou collation.
-2. Il ajoute des aliments par dictee, saisie texte ou scan.
-3. Il confirme, les aliments sont ajoutes au repas choisi.
-4. L'app sauvegarde automatiquement les repas du jour dans le stockage local du telephone.
-5. Quand la date change, l'ancienne journee est archivee et la nouvelle journee repart a zero.
-6. L'ecran Historique affiche les anciennes journees avec calories, macros et aliments.
-
-Flux poids / pesees :
-1. L'utilisateur va dans Historique.
-2. Il ajoute une pesee seulement quand il veut.
-3. La date est libre : aujourd'hui ou une ancienne date.
-4. La pesee est stockee a part des repas, dans `pesees`.
-5. Objectif futur : utiliser ces donnees pour faire des graphiques de poids.
+Flux nutrition :
+1. La nutrition est retiree de l'app mobile actuelle.
+2. Le code serveur nutrition et les bases restent dans le repo pour l'historique, mais l'app ne les appelle plus.
 
 ---
 
 ## Ce qui fonctionne
 - App installee sur Samsung.
 - APK preview autonome testee : l'app s'ouvre sans Expo, sans PC et sans adresse IP.
-- Ecran principal avec compteur de calories.
-- Saisie manuelle d'un repas.
-- Dictee vocale continue amelioree : le texte s'accumule pendant les pauses.
-- Le micro se coupe automatiquement quand on lance l'analyse.
-- Analyse de plusieurs aliments en une seule dictee.
-- Interface de confirmation avec colonnes Aliment / Quantite / Calories.
-- Macros visibles : proteines, glucides, lipides sur l'ecran principal et l'ecran de confirmation.
-- Modification d'un aliment puis bouton OK pour recalculer.
-- Suppression d'un aliment avec bouton X.
-- Ajout manuel d'un aliment avec bouton +.
-- Calories et macros renvoyees par le serveur.
-- Base Ciqual + extras fonctionnelle.
-- Onglet Scan fonctionnel avec Open Food Facts.
-- Possibilite de scanner plusieurs produits dans le meme repas sans perdre les produits deja ajoutes.
-- Produits scannes recalcules proportionnellement quand on modifie la quantite.
-- Boissons scannees gerees en ml quand Open Food Facts indique une boisson.
-- Quatre repas disponibles : petit dejeuner, dejeuner, diner, collation.
-- Detail d'un repas avec total calories/macros et liste des aliments.
-- Dans un repas deja enregistre, on peut modifier un aliment, recalculer avec OK ou supprimer avec X.
-- Sauvegarde locale ajoutee avec AsyncStorage.
-- Historique simple ajoute : les journees precedentes sont archivees localement.
-- Historique rendu modifiable : les aliments d'une ancienne journee peuvent etre modifies, recalcules ou supprimes.
-- Pesees libres ajoutees : date + poids en kg, sans obligation quotidienne.
-- Les pesees sont separees des journees repas pour eviter une fausse journee a 0 kcal.
-- Objectifs nutrition ajoutes : illimite, maximum, minimum ou cible pour calories/proteines/glucides/lipides.
-- Aliments personnels ajoutes : un produit scanne peut etre reutilise sans le rescanner.
-- Module entrainements ajoute :
-  - entree `Entrainements` depuis l'accueil.
-  - choix Force / HIIT.
-  - Force permet de creer un entrainement, par exemple pecs-epaules.
-  - Dans un entrainement force, on peut ajouter des exercices avec nom, poids, blocs `series x repetitions`, rythme et reglage machine.
-  - Les exercices de force sont modifiables et supprimables.
-  - On peut demarrer une seance de force aujourd'hui depuis un entrainement.
-  - Une seance force sauvegarde les performances realisees.
-  - La prochaine fois, l'app affiche la derniere performance pour aider a progresser.
-- Remise a zero automatique prevue au changement de date.
+- Ecran principal transforme en carnet d'entrainement.
+- Choix Force / HIIT.
+- HIIT conserve comme placeholder.
+- Force permet de creer un entrainement, par exemple pecs-epaules.
+- Dans un entrainement force, on peut ajouter des exercices avec nom, poids, blocs `series x repetitions`, rythme/repos et reglage machine.
+- Les exercices de force sont modifiables et supprimables.
+- On peut demarrer une seance de force aujourd'hui depuis un entrainement.
+- Une seance force sauvegarde les performances realisees.
+- La prochaine fois, l'app affiche la derniere performance pour aider a progresser.
+- Historique des seances de force.
+- Sauvegarde locale avec AsyncStorage.
+- Onglets nutrition/scan retires.
+- Plugins camera/micro retires de `app.json`.
 - APK Android construite via GitHub Actions quand Expo/EAS bloque au telechargement.
 - APK preview autonome construite avec EAS pour test sans PC.
 - Railway connecte a GitHub pour deploiement automatique.
@@ -803,6 +763,67 @@ eas build --profile preview --platform android
   - problemes d'ergonomie.
   - ameliorations utiles au quotidien.
 - A la prochaine session, transformer ce retour terrain en plan de correction priorise.
+
+### Session 15 - 8 mai 2026
+
+#### 1. Pivot produit
+- Decision : arreter le developpement nutrition pour le moment.
+- Raison : la nutrition coute trop cher et ajoute trop de complexite.
+- Nouveau focus : suivi d'entrainement, prise de notes et evaluation de la progression.
+
+#### 2. Suppression de la nutrition cote app
+- Remplacement de `app/(tabs)/index.tsx` par une version entrainement-only.
+- Suppression de l'experience nutrition :
+  - plus d'ecran calories/macros.
+  - plus de repas.
+  - plus de dictee nutrition.
+  - plus de scan produit.
+  - plus d'historique alimentaire.
+  - plus de pesees liees au module nutrition.
+  - plus de `Mes aliments`.
+  - plus d'objectifs nutrition.
+- Les appels couteux vers Claude/Open Food Facts ne sont plus utilises par l'app.
+
+#### 3. Suppression des onglets inutiles
+- Suppression de l'onglet `Scan`.
+- Suppression de l'onglet `Explore`.
+- L'app garde un onglet principal centre sur l'entrainement.
+- Suppression des fichiers :
+  - `app/(tabs)/scan.tsx`.
+  - `app/(tabs)/explore.tsx`.
+
+#### 4. Permissions natives nettoyees
+- Retrait des plugins natifs inutiles dans `app.json` :
+  - `expo-speech-recognition`.
+  - `expo-camera`.
+- Objectif : ne plus demander camera/micro dans les futurs builds autonomes.
+- Les dependances peuvent encore exister dans `package.json`, mais elles ne sont plus utilisees par le code mobile.
+
+#### 5. Fonctionnalites conservees
+- Carnet d'entrainement.
+- Section Force.
+- Section HIIT placeholder.
+- Creation de programmes force.
+- Exercices avec :
+  - nom.
+  - poids.
+  - blocs `series x repetitions`.
+  - rythme / repos.
+  - reglage machine.
+- Demarrage d'une seance aujourd'hui.
+- Sauvegarde locale des seances.
+- Historique des seances.
+- Reprise de la derniere performance pour suivre la progression.
+
+#### 6. Tests techniques
+- TypeScript OK :
+```powershell
+npx tsc --noEmit
+```
+- Lint Expo OK :
+```powershell
+npx expo lint
+```
 
 ---
 
